@@ -1,0 +1,20 @@
+{
+  "runId": "2025-09-10T18-23-37-731Z",
+  "timestamp": "2025-09-10T18:23:44.941Z",
+  "totalOrders": 10,
+  "successfulImports": 0,
+  "failedImports": 10,
+  "skippedOrders": 0,
+  "errors": [
+    "Failed to import order 120298 (6310285344952): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120299 (6310413271224): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120300 (6310755827896): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120295 (6308337844408): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120297 (6310024380600): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120294 (6307862905016): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120293 (6306666741944): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120290 (6303605489848): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120289 (6303005900984): Non-error was thrown: \"[object Object]\". You should only throw errors.",
+    "Failed to import order 120288 (6301693477048): Non-error was thrown: \"[object Object]\". You should only throw errors."
+  ]
+}
