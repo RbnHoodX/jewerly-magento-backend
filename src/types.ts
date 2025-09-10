@@ -143,6 +143,7 @@ export interface ShopifyOrder {
   total_price: string
   subtotal_price: string
   total_tax: string
+  total_shipping?: string
   currency: string
   customer?: ShopifyCustomer
   billing_address?: ShopifyAddress
@@ -340,6 +341,13 @@ export interface OrderInsertData {
   total_amount: number
   bill_to_name?: string
   ship_to_name?: string
+  delivery_method?: string
+  // TODO: Add these fields to database schema
+  // order_number?: string
+  // notes?: string
+  // admin_order_number?: string
+  // shipping_service?: string
+  // shipping_cost?: number
 }
 
 export interface OrderItemInsertData {
@@ -350,7 +358,10 @@ export interface OrderItemInsertData {
   details?: string
   price: number
   qty: number
-  image?: string
+  // TODO: Add these fields to database schema
+  // image?: string
+  // specification_summary?: string
+  // engraving?: string
 }
 
 export interface AddressInsertData {

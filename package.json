@@ -9,6 +9,8 @@
     "dev": "tsx src/index.ts",
     "sync:once": "tsx src/index.ts --once",
     "cleanup:duplicates": "tsx src/cleanup-duplicates.ts",
+    "cleanup:tracking-notes": "tsx src/cleanup-tracking-notes.ts",
+    "cleanup": "tsx src/cleanup-supabase.ts",
     "lint": "eslint ."
   },
   "dependencies": {

@@ -76,7 +76,7 @@ async function fetchTaggedOrders(config: SyncConfig): Promise<ShopifyOrder[]> {
   const { since } = config.sync
 
   const limit = 250
-  let url = `https://${storeDomain}/admin/api/${apiVersion}/orders.json?status=any&limit=${limit}&fields=id,name,created_at,customer,current_total_price,financial_status,fulfillment_status,shipping_address,billing_address,line_items,tags,email,phone`
+  let url = `https://${storeDomain}/admin/api/${apiVersion}/orders.json?status=any&limit=${limit}&fields=id,name,created_at,customer,current_total_price,financial_status,fulfillment_status,shipping_address,billing_address,line_items,tags,email,phone,note,order_number,total_shipping,fulfillments`
   // Use orders with tag filter
   url += `&tag=${encodeURIComponent(importTag)}`
   if (since) url += `&created_at_min=${encodeURIComponent(since)}`

@@ -61,6 +61,36 @@ export class DatabaseService {
     if (error) throw error
   }
 
+  async updateOrderTrackingNote(orderId: string, shopifyOrderId: string, shopifyOrderName: string): Promise<void> {
+    // Update existing tracking note instead of creating a new one
+    // First find the existing note with the old format
+    const { data: existingNote, error: findError } = await this.supabase
+      .from('order_customer_notes')
+      .select('id')
+      .eq('order_id', orderId)
+      .like('content', `Shopify Order: ${shopifyOrderId}%`)
+      .limit(1)
+      .maybeSingle()
+    
+    if (findError) throw findError
+    
+    if (existingNote) {
+      // Update existing note
+      const { error: updateError } = await this.supabase
+        .from('order_customer_notes')
+        .update({
+          content: `Shopify Order: ${shopifyOrderId} (${shopifyOrderName})`,
+          status: 'imported'
+        })
+        .eq('id', existingNote.id)
+      
+      if (updateError) throw updateError
+    } else {
+      // Create new note if none exists
+      await this.markOrderAsImported(orderId, shopifyOrderId, shopifyOrderName)
+    }
+  }
+
   async upsertCustomer(customerData: CustomerUpsertData): Promise<string | undefined> {
     const { email, ...payload } = customerData
     
@@ -79,7 +109,10 @@ export class DatabaseService {
         .from('customers')
         .update(payload)
         .eq('id', existing.id)
-      if (updateErr) throw updateErr
+      if (updateErr) {
+        console.error('Customer update error:', updateErr)
+        throw new Error(`Failed to update customer: ${updateErr.message || JSON.stringify(updateErr)}`)
+      }
       return existing.id
     } else {
       // Insert new customer
@@ -88,7 +121,10 @@ export class DatabaseService {
         .insert({ email, ...payload })
         .select('id')
         .single()
-      if (insErr) throw insErr
+      if (insErr) {
+        console.error('Customer insert error:', insErr)
+        throw new Error(`Failed to insert customer: ${insErr.message || JSON.stringify(insErr)}`)
+      }
       return ins.id
     }
   }
@@ -99,7 +135,10 @@ export class DatabaseService {
       .insert(orderData)
       .select('id')
       .single()
-    if (orderErr) throw orderErr
+    if (orderErr) {
+      console.error('Order creation error:', orderErr)
+      throw new Error(`Failed to create order: ${orderErr.message || JSON.stringify(orderErr)}`)
+    }
     return newOrder.id
   }
 
@@ -109,21 +148,30 @@ export class DatabaseService {
     const { error: itemErr } = await this.supabase
       .from('order_items')
       .insert(items)
-    if (itemErr) throw itemErr
+    if (itemErr) {
+      console.error('Order items creation error:', itemErr)
+      throw new Error(`Failed to create order items: ${itemErr.message || JSON.stringify(itemErr)}`)
+    }
   }
 
   async upsertBillingAddress(addressData: AddressInsertData): Promise<void> {
     const { error } = await this.supabase
       .from('order_billing_address')
-      .upsert(addressData, { onConflict: 'order_id' })
-    if (error) throw error
+      .insert(addressData)
+    if (error) {
+      console.error('Billing address insert error:', error)
+      throw new Error(`Failed to insert billing address: ${error.message || JSON.stringify(error)}`)
+    }
   }
 
   async upsertShippingAddress(addressData: AddressInsertData): Promise<void> {
     const { error } = await this.supabase
       .from('order_shipping_address')
-      .upsert(addressData, { onConflict: 'order_id' })
-    if (error) throw error
+      .insert(addressData)
+    if (error) {
+      console.error('Shipping address insert error:', error)
+      throw new Error(`Failed to insert shipping address: ${error.message || JSON.stringify(error)}`)
+    }
   }
 
   async createCompleteOrder(
@@ -156,7 +204,50 @@ export class DatabaseService {
     return orderId
   }
 
-  async updateCompleteOrder(
+  async deleteOrderData(orderId: string): Promise<void> {
+    console.log(`🗑️ Deleting all data for order ${orderId}`)
+    
+    // Delete order items
+    const { error: deleteItemsError } = await this.supabase
+      .from('order_items')
+      .delete()
+      .eq('order_id', orderId)
+    
+    if (deleteItemsError) throw deleteItemsError
+    console.log(`   🛍️ Deleted order items`)
+
+    // Delete billing address
+    const { error: deleteBillingError } = await this.supabase
+      .from('order_billing_address')
+      .delete()
+      .eq('order_id', orderId)
+    
+    if (deleteBillingError) throw deleteBillingError
+    console.log(`   🏠 Deleted billing address`)
+
+    // Delete shipping address
+    const { error: deleteShippingError } = await this.supabase
+      .from('order_shipping_address')
+      .delete()
+      .eq('order_id', orderId)
+    
+    if (deleteShippingError) throw deleteShippingError
+    console.log(`   📦 Deleted shipping address`)
+
+    // Delete order customer notes (except tracking notes)
+    const { error: deleteNotesError } = await this.supabase
+      .from('order_customer_notes')
+      .delete()
+      .eq('order_id', orderId)
+      .not('content', 'like', 'Shopify Order:%')
+    
+    if (deleteNotesError) throw deleteNotesError
+    console.log(`   📝 Deleted customer notes (preserved tracking notes)`)
+
+    console.log(`✅ All data deleted for order ${orderId}`)
+  }
+
+  async recreateOrderData(
     orderId: string,
     customerData: CustomerUpsertData,
     orderData: OrderInsertData,
@@ -164,12 +255,16 @@ export class DatabaseService {
     billingAddress?: AddressInsertData,
     shippingAddress?: AddressInsertData
   ): Promise<void> {
+    console.log(`🔄 Recreating order ${orderId} with fresh Shopify data`)
+    
     // Update customer if email exists
     if (customerData.email) {
+      console.log(`   📧 Updating customer: ${customerData.email}`)
       await this.upsertCustomer(customerData)
     }
     
     // Update order data
+    console.log(`   📦 Updating order fields:`, Object.keys(orderData))
     const { error: orderError } = await this.supabase
       .from('orders')
       .update(orderData)
@@ -177,26 +272,25 @@ export class DatabaseService {
     
     if (orderError) throw orderError
 
-    // Delete existing items and recreate
-    const { error: deleteItemsError } = await this.supabase
-      .from('order_items')
-      .delete()
-      .eq('order_id', orderId)
-    
-    if (deleteItemsError) throw deleteItemsError
+    // Create new order items
+    if (items && items.length > 0) {
+      console.log(`   🛍️ Creating ${items.length} order items`)
+      const orderItems = items.map(item => ({ ...item, order_id: orderId }))
+      await this.createOrderItems(orderItems)
+    }
 
-    // Insert new items
-    const orderItems = items.map(item => ({ ...item, order_id: orderId }))
-    await this.createOrderItems(orderItems)
-
-    // Update addresses if provided
+    // Create new addresses
     if (billingAddress) {
+      console.log(`   🏠 Creating billing address`)
       await this.upsertBillingAddress({ ...billingAddress, order_id: orderId })
     }
     
     if (shippingAddress) {
+      console.log(`   📦 Creating shipping address`)
       await this.upsertShippingAddress({ ...shippingAddress, order_id: orderId })
     }
+    
+    console.log(`✅ Order ${orderId} recreated successfully`)
   }
 
   async getOrderIdByShopifyId(shopifyOrderId: string): Promise<string | null> {
@@ -210,5 +304,17 @@ export class DatabaseService {
     
     if (error) throw error
     return data?.order_id || null
+  }
+
+  async getExistingOrderData(orderId: string): Promise<any> {
+    // Get existing order data to preserve fields not synced from Shopify
+    const { data, error } = await this.supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single()
+    
+    if (error) throw error
+    return data
   }
 }

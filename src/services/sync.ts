@@ -49,24 +49,46 @@ export class SyncService {
         let orderId: string
         
         if (existingOrderId) {
-          // Update existing order
-          this.logger.log('info', 'Updating existing order', {
+          // Delete all existing data and recreate with fresh Shopify data
+          this.logger.log('info', 'Deleting and recreating existing order', {
             shopifyId,
             name: order.name,
             orderId: existingOrderId
           })
           
+          // Get existing order data to preserve non-Shopify fields
+          const existingOrder = await this.db.getExistingOrderData(existingOrderId)
+          
+          // Delete all order-related data
           await pRetry(
-            () => this.db.updateCompleteOrder(
+            () => this.db.deleteOrderData(existingOrderId),
+            { retries: this.config.sync.retries }
+          )
+          
+          // Merge Shopify data with existing data, preserving non-Shopify fields
+          const mergedOrderData = {
+            ...existingOrder, // Preserve all existing data
+            ...orderData,     // Override with Shopify data
+            id: existingOrderId, // Ensure ID stays the same
+            created_at: existingOrder.created_at, // Preserve original creation time
+            updated_at: new Date().toISOString() // Update the modified time
+          }
+          
+          // Recreate all data with fresh Shopify data
+          await pRetry(
+            () => this.db.recreateOrderData(
               existingOrderId,
               customerData,
-              orderData,
+              mergedOrderData,
               items,
               billingAddress,
               shippingAddress
             ),
             { retries: this.config.sync.retries }
           )
+
+          // Update tracking note instead of creating a new one
+          await this.db.updateOrderTrackingNote(existingOrderId, shopifyId, order.name)
           
           orderId = existingOrderId
           result.status = 'updated'
@@ -109,7 +131,9 @@ export class SyncService {
 
       } catch (err: any) {
         result.status = 'error'
-        result.error = err?.message || String(err)
+        // Better error handling to show actual error details
+        const errorMessage = err?.message || err?.details || err?.hint || String(err)
+        result.error = errorMessage
         result.snapshot = {
           created_at: order.created_at,
           email: order.email,
@@ -118,8 +142,10 @@ export class SyncService {
           tags: order.tags,
         }
 
-        const errorMsg = `Failed to import order ${order.name} (${shopifyId}): ${result.error}`
-        this.logger.log('error', errorMsg)
+        const errorMsg = `Failed to import order ${order.name} (${shopifyId}): ${errorMessage}`
+        this.logger.log('error', errorMsg, { 
+          fullError: err
+        })
         errors.push(errorMsg)
       }
 
