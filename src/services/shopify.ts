@@ -1,4 +1,4 @@
-import { ShopifyOrder } from '../types'
+import { ShopifyOrder, ShopifyProduct } from '../types'
 
 export class ShopifyService {
   constructor(
@@ -52,5 +52,40 @@ export class ShopifyService {
     ))
 
     await this.updateOrderTags(orderId, newTags)
+  }
+
+  async fetchProduct(productId: number): Promise<ShopifyProduct> {
+    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/products/${productId}.json`
+    
+    const res = await fetch(url, {
+      headers: {
+        'X-Shopify-Access-Token': this.accessToken,
+        'Content-Type': 'application/json',
+      },
+    })
+    
+    if (!res.ok) throw new Error(`Fetch product failed: ${res.status}`)
+    
+    const json = (await res.json()) as { product?: ShopifyProduct }
+    return json.product as ShopifyProduct
+  }
+
+  async getProductImageUrl(lineItem: any): Promise<string | null> {
+    try {
+      // If line item has a product_id, fetch the product to get images
+      if (lineItem.product_id) {
+        const product = await this.fetchProduct(lineItem.product_id)
+        
+        // If there are images, return the first one
+        if (product.images && product.images.length > 0) {
+          return product.images[0].src
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.warn(`Failed to fetch image for product ${lineItem.product_id}:`, error)
+      return null
+    }
   }
 }

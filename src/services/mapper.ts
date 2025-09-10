@@ -42,7 +42,7 @@ export class DataMapper {
     }
   }
 
-  static mapShopifyToOrderItems(order: ShopifyOrder): OrderItemInsertData[] {
+  static mapShopifyToOrderItems(order: ShopifyOrder, imageUrls?: Map<number, string>): OrderItemInsertData[] {
     const items = order.line_items ?? []
     return items.map((li) => {
       // Extract properties from line item
@@ -56,6 +56,9 @@ export class DataMapper {
         .map(prop => `${prop.name}: ${prop.value}`)
         .join(', ')
 
+      // Get image URL for this line item
+      const imageUrl = imageUrls?.get(li.id) || null
+
       return {
         sku: li.sku || li.variant_id?.toString() || li.id.toString(),
         details: li.title ?? null,
@@ -63,10 +66,10 @@ export class DataMapper {
         qty: Number(li.quantity ?? 1),
         size: ringSize || null,
         metal_type: metalType || null,
+        image: imageUrl,
         // Only include fields that exist in the database schema
         // specification_summary: specSummary || null, // TODO: Add this field to database schema
         // engraving: engraving || null, // TODO: Add this field to database schema
-        // image: null, // TODO: Add this field to database schema
       }
     })
   }

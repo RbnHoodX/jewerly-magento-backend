@@ -36,10 +36,39 @@ export class SyncService {
       }
 
       try {
+        // Fetch image URLs for line items
+        const imageUrls = new Map<number, string>()
+        if (order.line_items && order.line_items.length > 0) {
+          this.logger.log('debug', 'Fetching product images', {
+            shopifyId,
+            lineItemsCount: order.line_items.length
+          })
+          
+          for (const lineItem of order.line_items) {
+            try {
+              const imageUrl = await this.shopify.getProductImageUrl(lineItem)
+              if (imageUrl) {
+                imageUrls.set(lineItem.id, imageUrl)
+                this.logger.log('debug', 'Found product image', {
+                  lineItemId: lineItem.id,
+                  productId: lineItem.product_id,
+                  imageUrl
+                })
+              }
+            } catch (error) {
+              this.logger.log('warn', 'Failed to fetch image for line item', {
+                lineItemId: lineItem.id,
+                productId: lineItem.product_id,
+                error: error instanceof Error ? error.message : String(error)
+              })
+            }
+          }
+        }
+
         // Map Shopify data to our database format
         const customerData = DataMapper.mapShopifyToCustomerData(order)
         const orderData = DataMapper.mapShopifyToOrderData(order)
-        const items = DataMapper.mapShopifyToOrderItems(order)
+        const items = DataMapper.mapShopifyToOrderItems(order, imageUrls)
         const billingAddress = DataMapper.mapShopifyToBillingAddress(order)
         const shippingAddress = DataMapper.mapShopifyToShippingAddress(order)
 
