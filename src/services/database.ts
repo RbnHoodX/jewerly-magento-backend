@@ -10,6 +10,57 @@ import {
 export class DatabaseService {
   constructor(private supabase: SupabaseClient) {}
 
+  async checkOrderExists(shopifyOrderId: string): Promise<boolean> {
+    // Check if order already exists by looking for a comment or note that contains the Shopify order ID
+    // We'll use the order_customer_notes table to store the Shopify order ID as a reference
+    const { data, error } = await this.supabase
+      .from('order_customer_notes')
+      .select('id')
+      .eq('content', `Shopify Order: ${shopifyOrderId}`)
+      .limit(1)
+      .maybeSingle()
+    
+    if (error) throw error
+    return !!data
+  }
+
+  async checkOrderExistsByDetails(
+    customerEmail: string, 
+    orderDate: string, 
+    totalAmount: number
+  ): Promise<boolean> {
+    // Alternative check: look for orders with same customer, date, and total amount
+    const { data, error } = await this.supabase
+      .from('orders')
+      .select(`
+        id,
+        customers!inner(email),
+        order_date,
+        total_amount
+      `)
+      .eq('customers.email', customerEmail)
+      .eq('order_date', orderDate)
+      .eq('total_amount', totalAmount)
+      .limit(1)
+      .maybeSingle()
+    
+    if (error) throw error
+    return !!data
+  }
+
+  async markOrderAsImported(orderId: string, shopifyOrderId: string, shopifyOrderName: string): Promise<void> {
+    // Create a customer note to mark this order as imported from Shopify
+    const { error } = await this.supabase
+      .from('order_customer_notes')
+      .insert({
+        order_id: orderId,
+        content: `Shopify Order: ${shopifyOrderId} (${shopifyOrderName})`,
+        status: 'imported'
+      })
+    
+    if (error) throw error
+  }
+
   async upsertCustomer(customerData: CustomerUpsertData): Promise<string | undefined> {
     const { email, ...payload } = customerData
     
@@ -103,5 +154,61 @@ export class DatabaseService {
     }
 
     return orderId
+  }
+
+  async updateCompleteOrder(
+    orderId: string,
+    customerData: CustomerUpsertData,
+    orderData: OrderInsertData,
+    items: OrderItemInsertData[],
+    billingAddress?: AddressInsertData,
+    shippingAddress?: AddressInsertData
+  ): Promise<void> {
+    // Update customer if email exists
+    if (customerData.email) {
+      await this.upsertCustomer(customerData)
+    }
+    
+    // Update order data
+    const { error: orderError } = await this.supabase
+      .from('orders')
+      .update(orderData)
+      .eq('id', orderId)
+    
+    if (orderError) throw orderError
+
+    // Delete existing items and recreate
+    const { error: deleteItemsError } = await this.supabase
+      .from('order_items')
+      .delete()
+      .eq('order_id', orderId)
+    
+    if (deleteItemsError) throw deleteItemsError
+
+    // Insert new items
+    const orderItems = items.map(item => ({ ...item, order_id: orderId }))
+    await this.createOrderItems(orderItems)
+
+    // Update addresses if provided
+    if (billingAddress) {
+      await this.upsertBillingAddress({ ...billingAddress, order_id: orderId })
+    }
+    
+    if (shippingAddress) {
+      await this.upsertShippingAddress({ ...shippingAddress, order_id: orderId })
+    }
+  }
+
+  async getOrderIdByShopifyId(shopifyOrderId: string): Promise<string | null> {
+    // Find order ID by looking for the Shopify tracking note
+    const { data, error } = await this.supabase
+      .from('order_customer_notes')
+      .select('order_id')
+      .eq('content', `Shopify Order: ${shopifyOrderId}`)
+      .limit(1)
+      .maybeSingle()
+    
+    if (error) throw error
+    return data?.order_id || null
   }
 }

@@ -281,7 +281,7 @@ export interface OrderImportResult {
   runId: string
   shopifyId: string
   name: string
-  status: 'success' | 'error' | 'skipped'
+  status: 'success' | 'updated' | 'error' | 'skipped'
   orderId?: string
   error?: string
   summary?: {

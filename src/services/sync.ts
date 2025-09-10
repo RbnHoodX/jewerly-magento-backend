@@ -43,17 +43,54 @@ export class SyncService {
         const billingAddress = DataMapper.mapShopifyToBillingAddress(order)
         const shippingAddress = DataMapper.mapShopifyToShippingAddress(order)
 
-        // Create complete order in database
-        const orderId = await pRetry(
-          () => this.db.createCompleteOrder(
-            customerData,
-            orderData,
-            items,
-            billingAddress,
-            shippingAddress
-          ),
-          { retries: this.config.sync.retries }
-        )
+        // Check if order already exists by Shopify ID
+        const existingOrderId = await this.db.getOrderIdByShopifyId(shopifyId)
+        
+        let orderId: string
+        
+        if (existingOrderId) {
+          // Update existing order
+          this.logger.log('info', 'Updating existing order', {
+            shopifyId,
+            name: order.name,
+            orderId: existingOrderId
+          })
+          
+          await pRetry(
+            () => this.db.updateCompleteOrder(
+              existingOrderId,
+              customerData,
+              orderData,
+              items,
+              billingAddress,
+              shippingAddress
+            ),
+            { retries: this.config.sync.retries }
+          )
+          
+          orderId = existingOrderId
+          result.status = 'updated'
+        } else {
+          // Create new order
+          this.logger.log('info', 'Creating new order', {
+            shopifyId,
+            name: order.name
+          })
+          
+          orderId = await pRetry(
+            () => this.db.createCompleteOrder(
+              customerData,
+              orderData,
+              items,
+              billingAddress,
+              shippingAddress
+            ),
+            { retries: this.config.sync.retries }
+          )
+
+          // Mark order as imported to prevent future duplicates
+          await this.db.markOrderAsImported(orderId, shopifyId, order.name)
+        }
 
         result.orderId = orderId
         result.summary = {
@@ -97,6 +134,7 @@ export class SyncService {
 
     // Calculate summary
     const successfulImports = results.filter(r => r.status === 'success').length
+    const updatedImports = results.filter(r => r.status === 'updated').length
     const failedImports = results.filter(r => r.status === 'error').length
     const skippedOrders = results.filter(r => r.status === 'skipped').length
 
@@ -104,7 +142,7 @@ export class SyncService {
       runId,
       timestamp: new Date().toISOString(),
       totalOrders: orders.length,
-      successfulImports,
+      successfulImports: successfulImports + updatedImports, // Combine new and updated
       failedImports,
       skippedOrders,
       errors
@@ -119,7 +157,8 @@ export class SyncService {
     this.logger.log('info', 'Sync completed', {
       runId,
       totalOrders: orders.length,
-      successfulImports,
+      successfulImports: successfulImports + updatedImports,
+      updatedImports,
       failedImports,
       skippedOrders
     })

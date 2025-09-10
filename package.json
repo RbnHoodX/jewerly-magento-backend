@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "sync:once": "tsx src/index.ts --once",
+    "cleanup:duplicates": "tsx src/cleanup-duplicates.ts",
     "lint": "eslint ."
   },
   "dependencies": {
