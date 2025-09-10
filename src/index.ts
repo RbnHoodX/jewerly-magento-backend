@@ -94,6 +94,30 @@ async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOr
     first_name: order?.customer?.first_name ?? null,
     last_name: order?.customer?.last_name ?? null,
     phone: order?.customer?.phone ?? order?.phone ?? null,
+    billing_addr: order.billing_address ? {
+      first_name: order.billing_address.first_name,
+      last_name: order.billing_address.last_name,
+      company: order.billing_address.company,
+      address1: order.billing_address.address1,
+      address2: order.billing_address.address2,
+      city: order.billing_address.city,
+      province: order.billing_address.province,
+      zip: order.billing_address.zip,
+      country: order.billing_address.country,
+      phone: order.billing_address.phone,
+    } : null,
+    shipping_addr: order.shipping_address ? {
+      first_name: order.shipping_address.first_name,
+      last_name: order.shipping_address.last_name,
+      company: order.shipping_address.company,
+      address1: order.shipping_address.address1,
+      address2: order.shipping_address.address2,
+      city: order.shipping_address.city,
+      province: order.shipping_address.province,
+      zip: order.shipping_address.zip,
+      country: order.shipping_address.country,
+      phone: order.shipping_address.phone,
+    } : null,
   }
   // Upsert customer by email
   let customerId: string | undefined
@@ -104,6 +128,12 @@ async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOr
       .eq('email', email)
       .maybeSingle()
     if (existing?.id) {
+      // Update existing customer with new address info
+      const { error: updateErr } = await supabase
+        .from('customers')
+        .update(customerPayload)
+        .eq('id', existing.id)
+      if (updateErr) throw updateErr
       customerId = existing.id
     } else {
       const { data: ins, error: insErr } = await supabase
