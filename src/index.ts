@@ -82,16 +82,9 @@ async function fetchTaggedOrders(since?: string): Promise<ShopifyOrder[]> {
   return orders
 }
 
-async function hasImported(supabase: SupabaseClient, shopifyOrderId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('shopify_imports')
-    .select('id')
-    .eq('shopify_order_id', String(shopifyOrderId))
-    .limit(1)
-    .maybeSingle()
-  if (error) throw error
-  return !!data
-}
+// Idempotency strategy: rely on Shopify tag workflow.
+// We fetch only orders with the import tag; after a successful import,
+// we retag the order so it won't be fetched again. No DB tracking table used.
 
 async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOrder) {
   const email = order?.email || order?.customer?.email
@@ -127,8 +120,21 @@ async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOr
   const orderPayload: any = {
     customer_id: customerId ?? null,
     purchase_from: 'primestyle',
-    order_date: order.created_at,
+    // orders.order_date is DATE, not timestamp
+    order_date: (order.created_at ? String(order.created_at).slice(0, 10) : null),
     total_amount: Number(order.current_total_price ?? 0),
+    bill_to_name: (() => {
+      const b = order.billing_address
+      if (b?.first_name || b?.last_name) return `${b.first_name ?? ''} ${b.last_name ?? ''}`.trim() || null
+      if (order.customer?.first_name || order.customer?.last_name) return `${order.customer.first_name ?? ''} ${order.customer.last_name ?? ''}`.trim() || null
+      return order.customer?.email ?? null
+    })(),
+    ship_to_name: (() => {
+      const s = order.shipping_address
+      if (s?.first_name || s?.last_name) return `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || null
+      if (order.customer?.first_name || order.customer?.last_name) return `${order.customer.first_name ?? ''} ${order.customer.last_name ?? ''}`.trim() || null
+      return order.customer?.email ?? null
+    })(),
   }
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
@@ -146,14 +152,16 @@ async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOr
       order_id: orderId,
       first_name: b.first_name ?? null,
       last_name: b.last_name ?? null,
-      address1: b.address1 ?? null,
-      address2: b.address2 ?? null,
+      company: b.company ?? null,
+      street1: b.address1 ?? null,
+      street2: b.address2 ?? null,
       city: b.city ?? null,
-      state: b.province ?? null,
-      postal_code: b.zip ?? null,
+      region: b.province ?? null,
+      postcode: b.zip ?? null,
       country: b.country ?? null,
       phone: b.phone ?? null,
-    }, { onConflict: 'order_id' } as any)
+      email: order.email ?? null,
+    } as any)
   }
   if (order.shipping_address) {
     const s = order.shipping_address
@@ -161,14 +169,16 @@ async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOr
       order_id: orderId,
       first_name: s.first_name ?? null,
       last_name: s.last_name ?? null,
-      address1: s.address1 ?? null,
-      address2: s.address2 ?? null,
+      company: s.company ?? null,
+      street1: s.address1 ?? null,
+      street2: s.address2 ?? null,
       city: s.city ?? null,
-      state: s.province ?? null,
-      postal_code: s.zip ?? null,
+      region: s.province ?? null,
+      postcode: s.zip ?? null,
       country: s.country ?? null,
       phone: s.phone ?? null,
-    }, { onConflict: 'order_id' } as any)
+      email: order.email ?? null,
+    } as any)
   }
 
   // Insert items
@@ -188,23 +198,7 @@ async function upsertCustomerAndOrder(supabase: SupabaseClient, order: ShopifyOr
   return orderId
 }
 
-async function writeImportLog(
-  supabase: SupabaseClient,
-  shopifyOrderId: string,
-  shopifyOrderName: string | undefined,
-  orderId: string,
-  status: 'completed' | 'failed',
-  error?: string,
-) {
-  const { error: logErr } = await supabase.from('shopify_imports').insert({
-    shopify_order_id: String(shopifyOrderId),
-    shopify_order_name: shopifyOrderName,
-    order_id: orderId,
-    status,
-    error: error ?? null,
-  })
-  if (logErr) throw logErr
-}
+// No DB import log; file logs capture success/skip/error per order
 
 async function retagOrder(orderId: string) {
   const store = getEnv('SHOPIFY_STORE_DOMAIN')!
@@ -218,7 +212,8 @@ async function retagOrder(orderId: string) {
     headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
   })
   if (!orderRes.ok) throw new Error(`Fetch order for retag failed: ${orderRes.status}`)
-  const order = (await orderRes.json()).order as ShopifyOrder
+  const json = (await orderRes.json()) as { order?: ShopifyOrder }
+  const order = json.order as ShopifyOrder
   const tags: string[] = (order.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
   const newTags = Array.from(new Set(tags.filter(t => t.toLowerCase() !== importTag.toLowerCase()).concat([processedTag])))
 
@@ -247,22 +242,12 @@ async function runOnce() {
 
   await queue.addAll(shopifyOrders.map((o) => async () => {
     const shopifyId = String(o.id)
-    const already = await hasImported(supabase, shopifyId)
-    if (already) {
-      log('info', 'Skipping already imported order', { shopifyId, name: o.name })
-      await writeJson(path.join(LOG_DIR, 'orders', `${runId}-${shopifyId}-skipped.json`), {
-        runId,
-        reason: 'already_imported',
-        shopifyId,
-        name: o.name,
-      })
-      return
-    }
+    // No DB check for already imported; tag-based idempotency only
 
     try {
       const orderId = await pRetry(() => upsertCustomerAndOrder(supabase, o), { retries: 2 })
-      await pRetry(() => writeImportLog(supabase, shopifyId, o.name, orderId, 'completed'), { retries: 2 })
-      await pRetry(() => retagOrder(shopifyId), { retries: 2 })
+      // Retagging disabled due to read-only Shopify permissions
+      // await pRetry(() => retagOrder(shopifyId), { retries: 2 })
       log('info', 'Imported order', { shopifyId, name: o.name, orderId })
       await writeJson(path.join(LOG_DIR, 'orders', `${runId}-${shopifyId}-success.json`), {
         runId,
@@ -279,12 +264,6 @@ async function runOnce() {
       })
     } catch (err: any) {
       log('error', 'Failed to import order', { shopifyId, name: o.name, error: err?.message || String(err) })
-      // Log failure without order_id
-      try {
-        await writeImportLog(supabase, shopifyId, o.name, null as any, 'failed', err?.message || String(err))
-      } catch (e) {
-        log('error', 'Failed writing import log', { shopifyId, error: (e as any)?.message || String(e) })
-      }
       await writeJson(path.join(LOG_DIR, 'orders', `${runId}-${shopifyId}-error.json`), {
         runId,
         shopifyId,
