@@ -11,6 +11,13 @@
     "cleanup:duplicates": "tsx src/cleanup-duplicates.ts",
     "cleanup:tracking-notes": "tsx src/cleanup-tracking-notes.ts",
     "cleanup": "tsx src/cleanup-supabase.ts",
+    "automation:start": "tsx src/scripts/automation-cli.ts start",
+    "automation:stop": "tsx src/scripts/automation-cli.ts stop",
+    "automation:run-once": "tsx src/scripts/automation-cli.ts run-once",
+    "automation:status": "tsx src/scripts/automation-cli.ts status",
+    "automation:test": "tsx src/scripts/test-automation.ts",
+    "test:migrations": "tsx src/scripts/test-migrations.ts",
+    "test:structure": "tsx src/scripts/test-structure.ts",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -29,5 +36,3 @@
     "typescript": "^5.6.2"
   }
 }
-
-
