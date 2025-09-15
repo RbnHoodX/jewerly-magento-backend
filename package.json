@@ -20,6 +20,8 @@
     "test:structure": "tsx src/scripts/test-structure.ts",
     "test:email": "tsx src/scripts/test-real-email.ts",
     "test:gmail": "tsx src/scripts/test-gmail-setup.ts",
+    "test:email-fix": "tsx src/scripts/test-email-fix.ts",
+    "test:simple-email": "tsx src/scripts/simple-email-test.ts",
     "lint": "eslint ."
   },
   "dependencies": {

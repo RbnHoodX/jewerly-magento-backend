@@ -86,7 +86,11 @@ export class ShopifyEmailService {
         return mockEmailId;
       }
     } catch (error) {
-      this.logger.log("error", "Failed to send email", { error });
+      this.logger.log("error", "Failed to send email", {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined,
+      });
       throw error;
     }
   }
@@ -98,34 +102,72 @@ export class ShopifyEmailService {
     this.logger.log("info", "Sending email via Gmail SMTP", {
       to: emailData.to,
       subject: emailData.subject,
+      from: this.fromEmail,
     });
 
-    const transporter = nodemailer.createTransporter({
-      service: "gmail",
+    // Create transporter with explicit Gmail SMTP settings
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true, // true for 465, false for other ports
       auth: {
         user: this.gmailUser,
         pass: this.gmailPassword,
       },
     });
 
+    // Verify connection configuration
+    try {
+      await transporter.verify();
+      this.logger.log("info", "Gmail SMTP connection verified successfully");
+    } catch (error) {
+      this.logger.log("error", "Gmail SMTP connection verification failed:", {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined,
+      });
+      throw new Error(
+        `Gmail SMTP connection failed: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
+
     const mailOptions = {
-      from: this.fromEmail,
+      from: `"PrimeStyle Automation" <${this.fromEmail}>`,
       to: emailData.to,
       subject: emailData.subject,
       text: emailData.body,
       html: emailData.body.replace(/\n/g, "<br>"),
+      replyTo: emailData.replyTo || this.fromEmail,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    const emailId = info.messageId || `gmail_${Date.now()}`;
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      const emailId = info.messageId || `gmail_${Date.now()}`;
 
-    this.logger.log("info", "Email sent successfully via Gmail SMTP", {
-      emailId,
-      to: emailData.to,
-      subject: emailData.subject,
-    });
+      this.logger.log("info", "Email sent successfully via Gmail SMTP", {
+        emailId,
+        to: emailData.to,
+        subject: emailData.subject,
+        messageId: info.messageId,
+      });
 
-    return emailId;
+      return emailId;
+    } catch (error) {
+      this.logger.log("error", "Failed to send email via Gmail SMTP:", {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined,
+        to: emailData.to,
+        subject: emailData.subject,
+      });
+      throw new Error(
+        `Gmail SMTP send failed: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    }
   }
 
   /**
