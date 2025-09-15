@@ -20,9 +20,9 @@ export interface OrderCustomerNote {
   id: string;
   order_id: string;
   status: string;
-  note: string | null;
-  is_automated: boolean | null;
-  triggered_by_rule_id: string | null;
+  content: string | null;
+  is_automated?: boolean | null;
+  triggered_by_rule_id?: string | null;
   created_at: string | null;
   created_by: string | null;
 }
@@ -44,7 +44,12 @@ export class AutomationService {
   private emailService: ShopifyEmailService;
 
   constructor(supabaseUrl: string, supabaseKey: string) {
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    this.supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
     this.logger = new Logger("AutomationService");
     this.emailService = new ShopifyEmailService();
   }
@@ -119,51 +124,10 @@ export class AutomationService {
    * Get orders that have the specified status as their latest customer note
    */
   private async getOrdersWithStatus(status: string): Promise<OrderData[]> {
-    // Get the latest customer note for each order
-    const { data: latestNotes, error: notesError } = await this.supabase
-      .from("order_customer_notes")
-      .select(
-        `
-        order_id,
-        status,
-        created_at,
-        id
-      `
-      )
-      .eq("status", status)
-      .order("created_at", { ascending: false });
-
-    if (notesError) {
-      this.logger.log("error", "Failed to fetch latest notes", {
-        error: notesError,
-      });
-      throw notesError;
-    }
-
-    if (!latestNotes || latestNotes.length === 0) {
-      return [];
-    }
-
-    // Get unique order IDs and fetch order details
-    const orderIds = [
-      ...new Set(latestNotes.map((note: any) => note.order_id)),
-    ];
-
-    const { data: orders, error: ordersError } = await this.supabase
+    // Get all orders first
+    const { data: allOrders, error: ordersError } = await this.supabase
       .from("orders")
-      .select(
-        `
-        id,
-        shopify_order_number,
-        customer_id,
-        customers!inner (
-          id,
-          name,
-          email
-        )
-      `
-      )
-      .in("id", orderIds);
+      .select("id, shopify_order_number, customer_id");
 
     if (ordersError) {
       this.logger.log("error", "Failed to fetch orders", {
@@ -172,15 +136,41 @@ export class AutomationService {
       throw ordersError;
     }
 
-    // Filter to only include orders where the latest note has the target status
+    if (!allOrders || allOrders.length === 0) {
+      return [];
+    }
+
+    // For each order, check if the latest customer note has the target status
     const validOrders: OrderData[] = [];
 
-    for (const order of orders || []) {
-      const latestNote = latestNotes.find(
-        (note: any) => note.order_id === order.id
-      );
-      if (latestNote) {
-        validOrders.push(order as OrderData);
+    for (const order of allOrders) {
+      const latestNote = await this.getLatestCustomerNote(order.id);
+
+      if (latestNote && latestNote.status === status) {
+        // Get customer data for this order
+        const { data: customer, error: customerError } = await this.supabase
+          .from("customers")
+          .select("id, name, email")
+          .eq("id", order.customer_id)
+          .single();
+
+        if (customerError) {
+          this.logger.log(
+            "warn",
+            `Failed to fetch customer for order ${order.id}`,
+            {
+              error: customerError,
+            }
+          );
+          continue;
+        }
+
+        validOrders.push({
+          id: order.id,
+          shopify_order_number: order.shopify_order_number,
+          customer_id: order.customer_id,
+          customers: customer,
+        } as OrderData);
       }
     }
 
@@ -342,9 +332,9 @@ export class AutomationService {
       .insert({
         order_id: orderId,
         status: status,
-        note: rule.description,
-        is_automated: true,
-        triggered_by_rule_id: rule.id,
+        content: rule.description,
+        // Note: is_automated and triggered_by_rule_id columns don't exist yet
+        // We'll add them in a migration later
       })
       .select()
       .single();
