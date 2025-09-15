@@ -19,6 +19,7 @@
     "test:migrations": "tsx src/scripts/test-migrations.ts",
     "test:structure": "tsx src/scripts/test-structure.ts",
     "test:email": "tsx src/scripts/test-real-email.ts",
+    "test:gmail": "tsx src/scripts/test-gmail-setup.ts",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "@supabase/supabase-js": "^2.46.1",
     "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^7.0.6",
     "p-queue": "^8.0.1",
     "p-retry": "^6.2.0",
     "tslib": "^2.6.3",

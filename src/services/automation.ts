@@ -416,7 +416,13 @@ export class AutomationService {
 
     // Send all emails
     for (const email of emails) {
-      await this.sendEmail(order.id, rule.id, email, newNote);
+      await this.sendEmail(
+        order.id,
+        rule.id,
+        email,
+        newNote,
+        order.customer_id
+      );
     }
   }
 
@@ -432,7 +438,8 @@ export class AutomationService {
       subject: string;
       message: string;
     },
-    note: OrderCustomerNote
+    note: OrderCustomerNote,
+    customerId?: string
   ): Promise<void> {
     try {
       // Log email attempt
@@ -462,6 +469,8 @@ export class AutomationService {
         to: email.recipient,
         subject: email.subject,
         body: email.message,
+        orderId: orderId,
+        customerId: email.type === "customer" ? customerId : undefined,
       });
 
       // Update log with success

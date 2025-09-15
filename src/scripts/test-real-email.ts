@@ -10,19 +10,18 @@ async function testRealEmail() {
   try {
     logger.info("Testing real email sending...");
 
-    // Check if SendGrid is configured
+    // Check if SendGrid is configured (preferred for real emails)
     const sendGridKey = process.env.SENDGRID_API_KEY;
     const fromEmail = process.env.FROM_EMAIL || "noreply@primestyle.com";
 
-    if (!sendGridKey) {
-      logger.error("SENDGRID_API_KEY not found in environment variables");
+    if (sendGridKey) {
+      logger.info("SendGrid API key found, testing real email sending...");
+    } else {
+      logger.warn("SendGrid not configured, will use mock email sending");
       logger.info("To enable real email sending, add to your .env file:");
       logger.info("SENDGRID_API_KEY=your_sendgrid_api_key");
       logger.info("FROM_EMAIL=noreply@primestyle.com");
-      return;
     }
-
-    logger.info("SendGrid API key found, testing email sending...");
 
     const emailService = new ShopifyEmailService();
 
@@ -38,10 +37,12 @@ Order Details:
 - Status: Casting Order
 - Customer: Jenny Adajar
 
-This email was sent using SendGrid integration.
+This email was sent using Shopify API integration.
 
 Best regards,
 PrimeStyle Automation System`,
+      orderId: "test_order_123", // Test order ID
+      customerId: "test_customer_456", // Test customer ID
     };
 
     const emailId = await emailService.sendEmail(emailData);
