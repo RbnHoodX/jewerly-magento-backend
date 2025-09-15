@@ -32,6 +32,9 @@ FROM_EMAIL=${fromEmail}
 # SendGrid Configuration (optional - leave empty to use Gmail)
 SENDGRID_API_KEY=
 
+# Google API Configuration (for Google Sheets)
+GOOGLE_API_KEY=your_google_api_key_here
+
 # Automation Configuration
 AUTOMATION_ENABLED=true
 AUTOMATION_INTERVAL_MINUTES=60

@@ -1,0 +1,8 @@
+{
+  "cronJobInterval": 60,
+  "syncEnabled": false,
+  "automationEnabled": false,
+  "emailNotifications": true,
+  "googleSheetsUrl": "",
+  "lastSyncTime": "2025-09-15T19:47:00.821Z"
+}
