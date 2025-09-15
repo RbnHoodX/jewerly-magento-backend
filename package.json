@@ -18,14 +18,16 @@
     "automation:test": "tsx src/scripts/test-automation.ts",
     "test:migrations": "tsx src/scripts/test-migrations.ts",
     "test:structure": "tsx src/scripts/test-structure.ts",
+    "test:email": "tsx src/scripts/test-real-email.ts",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.5",
     "@supabase/supabase-js": "^2.46.1",
     "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2",
-    "p-retry": "^6.2.0",
     "p-queue": "^8.0.1",
+    "p-retry": "^6.2.0",
     "tslib": "^2.6.3",
     "zod": "^3.23.8"
   },

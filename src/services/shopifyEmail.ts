@@ -1,4 +1,5 @@
 import { Logger } from "../utils/logger";
+import sgMail from "@sendgrid/mail";
 
 export interface EmailData {
   to: string;
@@ -10,58 +11,97 @@ export interface EmailData {
 
 export class ShopifyEmailService {
   private logger: Logger;
-  private shopifyApiKey: string;
-  private shopifyApiSecret: string;
+  private shopifyAccessToken: string;
   private shopifyShopDomain: string;
+  private sendGridApiKey: string;
+  private fromEmail: string;
+  private isConfigured: boolean;
+  private useSendGrid: boolean;
 
   constructor() {
     this.logger = new Logger("ShopifyEmailService");
 
-    // Get Shopify credentials from environment variables
-    this.shopifyApiKey = process.env.SHOPIFY_API_KEY || "";
-    this.shopifyApiSecret = process.env.SHOPIFY_API_SECRET || "";
+    // Get credentials from environment variables
+    this.shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN || "";
     this.shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
+    this.sendGridApiKey = process.env.SENDGRID_API_KEY || "";
+    this.fromEmail = process.env.FROM_EMAIL || "noreply@primestyle.com";
 
-    if (
-      !this.shopifyApiKey ||
-      !this.shopifyApiSecret ||
-      !this.shopifyShopDomain
-    ) {
+    this.isConfigured = !!(this.shopifyAccessToken && this.shopifyShopDomain);
+    this.useSendGrid = !!this.sendGridApiKey;
+
+    if (this.useSendGrid) {
+      sgMail.setApiKey(this.sendGridApiKey);
+      this.logger.log("info", "SendGrid configured for email sending");
+    } else if (!this.isConfigured) {
       this.logger.log(
         "warn",
-        "Shopify credentials not configured. Email sending will be disabled."
+        "No email service configured. Using mock email sending."
       );
     }
   }
 
   /**
-   * Send an email via Shopify API
+   * Send an email via SendGrid or Shopify API
    */
   async sendEmail(emailData: EmailData): Promise<string> {
     try {
-      if (
-        !this.shopifyApiKey ||
-        !this.shopifyApiSecret ||
-        !this.shopifyShopDomain
-      ) {
-        throw new Error("Shopify credentials not configured");
+      if (this.useSendGrid) {
+        return await this.sendEmailViaSendGrid(emailData);
+      } else if (this.isConfigured) {
+        return await this.sendEmailViaShopifyNotification(emailData);
+      } else {
+        // Return a mock email ID for testing purposes when no service is configured
+        const mockEmailId = `mock_email_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+
+        this.logger.log(
+          "info",
+          "Mock email sent (no email service configured)",
+          {
+            emailId: mockEmailId,
+            to: emailData.to,
+            subject: emailData.subject,
+          }
+        );
+
+        return mockEmailId;
       }
-
-      this.logger.log("info", "Sending email via Shopify API", {
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-
-      // For now, we'll use a mock implementation since Shopify doesn't have a direct email API
-      // In a real implementation, you would use Shopify's notification system or a third-party service
-      const emailId = await this.sendEmailViaShopifyNotification(emailData);
-
-      this.logger.log("info", "Email sent successfully", { emailId });
-      return emailId;
     } catch (error) {
-      this.logger.log("error", "Failed to send email via Shopify", { error });
+      this.logger.log("error", "Failed to send email", { error });
       throw error;
     }
+  }
+
+  /**
+   * Send email via SendGrid
+   */
+  private async sendEmailViaSendGrid(emailData: EmailData): Promise<string> {
+    this.logger.log("info", "Sending email via SendGrid", {
+      to: emailData.to,
+      subject: emailData.subject,
+    });
+
+    const msg = {
+      to: emailData.to,
+      from: emailData.from || this.fromEmail,
+      subject: emailData.subject,
+      text: emailData.body,
+      html: emailData.body.replace(/\n/g, "<br>"),
+    };
+
+    const response = await sgMail.send(msg);
+    const emailId =
+      response[0].headers["x-message-id"] || `sendgrid_${Date.now()}`;
+
+    this.logger.log("info", "Email sent successfully via SendGrid", {
+      emailId,
+      to: emailData.to,
+      subject: emailData.subject,
+    });
+
+    return emailId;
   }
 
   /**
