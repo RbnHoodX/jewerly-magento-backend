@@ -12,7 +12,13 @@ config();
 
 const app = express();
 const logger = new Logger("SystemSettingsAPI");
-const PORT = process.env.API_PORT || 3003;
+const PORT = process.env.PORT || process.env.API_PORT || 3003;
+
+// Log startup information
+console.log("🚀 Starting Shopify Database Sync API Server");
+console.log(`📦 Runtime: Bun ${process.version}`);
+console.log(`🌐 Port: ${PORT}`);
+console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
 
 // Initialize cron service
 let cronService: SystemCronService;
@@ -368,8 +374,18 @@ app.use(
 );
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("✅ Server started successfully!");
+  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+  console.log(`🧪 Test endpoint: http://localhost:${PORT}/test`);
+  console.log(`🔒 CORS enabled for all origins`);
+  console.log("🚀 Ready to accept requests!");
+  
   logger.log("info", `System Settings API server running on port ${PORT}`);
+  logger.log("info", `Health check available at: http://localhost:${PORT}/health`);
+  logger.log("info", `Test endpoint available at: http://localhost:${PORT}/test`);
+  logger.log("info", `CORS enabled for all origins`);
 });
 
 export default app;
