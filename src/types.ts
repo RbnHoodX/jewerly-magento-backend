@@ -361,6 +361,7 @@ export interface OrderInsertData {
   bill_to_name?: string;
   ship_to_name?: string;
   delivery_method?: string;
+  shopify_order_number?: string;
   // TODO: Add these fields to database schema
   // order_number?: string
   // notes?: string

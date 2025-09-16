@@ -221,6 +221,7 @@ export class SyncService {
       purchase_from: "shopify",
       order_date: order.created_at,
       total_amount: parseFloat(order.total_price),
+      shopify_order_number: order.name, // Store Shopify order number (e.g., #1001, #1002)
       bill_to_name: order.billing_address
         ? `${order.billing_address.first_name || ""} ${
             order.billing_address.last_name || ""
@@ -296,7 +297,15 @@ export class SyncService {
     // Update Shopify order tags to mark as processed
     await this.updateOrderTags(order);
 
-    this.logger.log("info", `Successfully processed order ${order.name}`);
+    this.logger.log(
+      "info",
+      `Successfully processed order ${order.name} (Shopify Order #${order.name})`,
+      {
+        orderId,
+        shopifyOrderNumber: order.name,
+        shopifyOrderId: order.id,
+      }
+    );
     return "success";
   }
 
