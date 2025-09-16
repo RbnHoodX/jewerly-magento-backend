@@ -1,7 +1,7 @@
 {
-  "cronJobInterval": 60,
-  "syncEnabled": false,
-  "automationEnabled": false,
+  "cronJobInterval": 5,
+  "syncEnabled": true,
+  "automationEnabled": true,
   "emailNotifications": true,
   "googleSheetsUrl": "",
   "shopifyImportTag": "new order",
