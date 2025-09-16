@@ -234,13 +234,36 @@ export class SyncService {
         : undefined,
     };
 
-    // Prepare order items
-    const orderItems: OrderItemInsertData[] = order.line_items.map(
-      (lineItem) => ({
-        sku: lineItem.sku,
-        details: lineItem.title,
-        price: parseFloat(lineItem.price),
-        qty: lineItem.quantity,
+    // Prepare order items with product images
+    const orderItems: OrderItemInsertData[] = await Promise.all(
+      order.line_items.map(async (lineItem) => {
+        this.logger.log("debug", `Processing line item: ${lineItem.title}`, {
+          lineItemKeys: Object.keys(lineItem),
+          productId: lineItem.product_id,
+          hasImage: !!lineItem.image,
+        });
+
+        // Fetch product image if product_id is available
+        let productImage: string | null = null;
+        if (lineItem.product_id) {
+          productImage = await this.fetchProductDetails(lineItem.product_id);
+          this.logger.log(
+            "debug",
+            `Fetched image for product ${lineItem.product_id}:`,
+            {
+              hasImage: !!productImage,
+              image: productImage,
+            }
+          );
+        }
+
+        return {
+          sku: lineItem.sku,
+          details: lineItem.title,
+          price: parseFloat(lineItem.price),
+          qty: lineItem.quantity,
+          image: productImage, // Use fetched product image
+        };
       })
     );
 
@@ -338,6 +361,45 @@ export class SyncService {
         }
       );
       // Don't throw error - tag update failure shouldn't stop the sync
+    }
+  }
+
+  /**
+   * Fetch product details from Shopify API
+   */
+  private async fetchProductDetails(productId: number): Promise<string | null> {
+    try {
+      const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${process.env.SHOPIFY_API_VERSION}/products/${productId}.json`;
+
+      const response = await fetch(url, {
+        headers: {
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        this.logger.log(
+          "warn",
+          `Failed to fetch product ${productId}: ${response.status}`
+        );
+        return null;
+      }
+
+      const data = await response.json();
+      const product = data.product;
+
+      // Get the first image from the product
+      if (product.images && product.images.length > 0) {
+        return product.images[0].src;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.log("warn", `Error fetching product ${productId}:`, {
+        error,
+      });
+      return null;
     }
   }
 
