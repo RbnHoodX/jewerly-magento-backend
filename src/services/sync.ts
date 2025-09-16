@@ -250,6 +250,7 @@ export class SyncService {
         });
 
         return {
+          order_id: "", // Will be set after order creation
           sku: lineItem.sku,
           details: lineItem.title,
           price: parseFloat(lineItem.price),
@@ -262,6 +263,7 @@ export class SyncService {
     // Prepare addresses
     const billingAddress: AddressInsertData | undefined = order.billing_address
       ? {
+          order_id: "", // Will be set after order creation
           first_name: order.billing_address.first_name || "",
           last_name: order.billing_address.last_name || "",
           company: order.billing_address.company,
@@ -279,6 +281,7 @@ export class SyncService {
     const shippingAddress: AddressInsertData | undefined =
       order.shipping_address
         ? {
+            order_id: "", // Will be set after order creation
             first_name: order.shipping_address.first_name || "",
             last_name: order.shipping_address.last_name || "",
             company: order.shipping_address.company,
@@ -400,6 +403,7 @@ export class SyncService {
           });
 
           return {
+            order_id: existingOrderId, // Add required order_id field
             sku: lineItem.sku,
             details: lineItem.title,
             price: parseFloat(lineItem.price),
@@ -409,15 +413,10 @@ export class SyncService {
         })
       );
 
-      // Update only the order items with images
-      await this.databaseService.updateOrderItemsWithImages(
-        existingOrderId,
-        orderItems
-      );
-
+      // Note: We don't update existing orders as per user requirements
       this.logger.log(
         "info",
-        `Successfully updated order items with images for ${order.name}`
+        `Order ${order.name} already exists, skipping image update`
       );
       return "success";
     } catch (error) {

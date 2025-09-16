@@ -11,6 +11,7 @@ export interface EmailData {
   replyTo?: string;
   orderId?: string;
   customerId?: string;
+  type?: string;
 }
 
 export class ShopifyEmailService {
@@ -72,13 +73,12 @@ export class ShopifyEmailService {
     try {
       // Log email attempt
       await this.emailLoggingService.logEmail({
-        timestamp: new Date().toISOString(),
-        recipient: emailData.to,
+        sent_at: new Date().toISOString(),
+        recipient_email: emailData.to,
         subject: emailData.subject,
         status: "pending",
-        provider: "gmail", // Will be updated based on actual provider used
         order_id: emailData.orderId,
-        customer_id: emailData.customerId,
+        email_type: emailData.type || "customer",
       });
 
       if (this.useSendGrid) {
@@ -111,13 +111,12 @@ export class ShopifyEmailService {
 
       // Log successful email
       await this.emailLoggingService.logEmail({
-        timestamp: new Date().toISOString(),
-        recipient: emailData.to,
+        sent_at: new Date().toISOString(),
+        recipient_email: emailData.to,
         subject: emailData.subject,
         status: "sent",
-        provider: provider,
         order_id: emailData.orderId,
-        customer_id: emailData.customerId,
+        email_type: emailData.type || "customer",
       });
 
       return emailId;
@@ -133,14 +132,13 @@ export class ShopifyEmailService {
 
       // Log failed email
       await this.emailLoggingService.logEmail({
-        timestamp: new Date().toISOString(),
-        recipient: emailData.to,
+        sent_at: new Date().toISOString(),
+        recipient_email: emailData.to,
         subject: emailData.subject,
         status: "failed",
-        provider: provider,
         error_message: errorMessage,
         order_id: emailData.orderId,
-        customer_id: emailData.customerId,
+        email_type: emailData.type || "customer",
       });
 
       throw error;

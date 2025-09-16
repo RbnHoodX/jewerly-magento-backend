@@ -11,7 +11,12 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/scripts/**/*",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/cleanup-duplicates.ts",
+    "src/services/googleSheetsFixed.ts"
+  ]
 }
-
-

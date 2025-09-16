@@ -17,15 +17,15 @@ export class DataMapper {
       name: customer
         ? `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
         : undefined,
-      first_name: customer?.first_name ?? null,
-      last_name: customer?.last_name ?? null,
-      phone: customer?.phone ?? order?.phone ?? null,
+      first_name: customer?.first_name ?? undefined,
+      last_name: customer?.last_name ?? undefined,
+      phone: customer?.phone ?? order?.phone ?? undefined,
       billing_addr: order.billing_address
         ? this.mapShopifyAddress(order.billing_address)
-        : null,
+        : undefined,
       shipping_addr: order.shipping_address
         ? this.mapShopifyAddress(order.shipping_address)
-        : null,
+        : undefined,
     };
   }
 
@@ -37,7 +37,7 @@ export class DataMapper {
       purchase_from: "primestyle",
       order_date: order.created_at
         ? String(order.created_at).slice(0, 10)
-        : null,
+        : undefined,
       total_amount: Number(order.current_total_price ?? 0),
       bill_to_name: this.extractName(
         order.billing_address,
@@ -60,7 +60,8 @@ export class DataMapper {
 
   static mapShopifyToOrderItems(
     order: ShopifyOrder,
-    imageUrls?: Map<number, string>
+    imageUrls?: Map<number, string>,
+    orderId?: string
   ): OrderItemInsertData[] {
     const items = order.line_items ?? [];
     return items.map((li) => {
@@ -91,13 +92,14 @@ export class DataMapper {
       const imageUrl = imageUrls?.get(li.id) || null;
 
       return {
+        order_id: orderId || "", // Add required order_id field
         sku: li.sku || li.variant_id?.toString() || li.id.toString(),
-        details: li.title ?? null,
+        details: li.title ?? undefined,
         price: Number(li.price ?? 0),
         qty: Number(li.quantity ?? 1),
-        size: ringSize || null,
-        metal_type: metalType || null,
-        image: imageUrl,
+        size: ringSize || undefined,
+        metal_type: metalType || undefined,
+        image: imageUrl || undefined,
         // Only include fields that exist in the database schema
         // specification_summary: specSummary || null, // TODO: Add this field to database schema
         // engraving: engraving || null, // TODO: Add this field to database schema
@@ -106,44 +108,48 @@ export class DataMapper {
   }
 
   static mapShopifyToBillingAddress(
-    order: ShopifyOrder
+    order: ShopifyOrder,
+    orderId?: string
   ): AddressInsertData | undefined {
     if (!order.billing_address) return undefined;
 
     const b = order.billing_address;
     return {
+      order_id: orderId || "",
       first_name: b.first_name || "",
       last_name: b.last_name || "",
-      company: b.company || null,
+      company: b.company || undefined,
       street1: b.address1 || "",
-      street2: b.address2 || null,
+      street2: b.address2 || undefined,
       city: b.city || "",
       region: b.province || "",
       postcode: b.zip || "",
       country: b.country || "",
-      phone: b.phone || null,
-      email: order.email || null,
+      phone: b.phone || undefined,
+      email: order.email || undefined,
     };
   }
 
   static mapShopifyToShippingAddress(
-    order: ShopifyOrder
+    order: ShopifyOrder,
+    orderId?: string
   ): AddressInsertData | undefined {
     if (!order.shipping_address) return undefined;
 
     const s = order.shipping_address;
     return {
+      order_id: orderId || "",
       first_name: s.first_name || "",
       last_name: s.last_name || "",
-      company: s.company || null,
+      company: s.company || undefined,
       street1: s.address1 || "",
-      street2: s.address2 || null,
+      street2: s.address2 || undefined,
       city: s.city || "",
       region: s.province || "",
       postcode: s.zip || "",
       country: s.country || "",
-      phone: s.phone || null,
-      email: order.email || null,
+      phone: s.phone || undefined,
+      email: order.email || undefined,
     };
   }
 
@@ -166,11 +172,12 @@ export class DataMapper {
     address: any,
     customer: any,
     email: string | undefined
-  ): string | null {
+  ): string | undefined {
     // Try address first
     if (address?.first_name || address?.last_name) {
       return (
-        `${address.first_name ?? ""} ${address.last_name ?? ""}`.trim() || null
+        `${address.first_name ?? ""} ${address.last_name ?? ""}`.trim() ||
+        undefined
       );
     }
 
@@ -178,12 +185,12 @@ export class DataMapper {
     if (customer?.first_name || customer?.last_name) {
       return (
         `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() ||
-        null
+        undefined
       );
     }
 
     // Last resort: email
-    return email || null;
+    return email || undefined;
   }
 
   private static extractProperty(
@@ -202,24 +209,24 @@ export class DataMapper {
   }
 
   private static extractShippingInfo(order: ShopifyOrder): {
-    service: string | null;
-    cost: number | null;
+    service: string | undefined;
+    cost: number | undefined;
   } {
     const fulfillments = order.fulfillments || [];
 
     if (fulfillments.length === 0) {
-      return { service: null, cost: null };
+      return { service: undefined, cost: undefined };
     }
 
     // Get the first fulfillment (most recent)
     const fulfillment = fulfillments[0];
-    const service = fulfillment.service || null;
+    const service = fulfillment.service || undefined;
 
     // Calculate shipping cost from order totals
     // If total_shipping is 0, it's free shipping
     // If it's 29.99, it's overnight upgrade
     const totalShipping = Number(order.total_shipping || 0);
-    const cost = totalShipping > 0 ? totalShipping : null;
+    const cost = totalShipping > 0 ? totalShipping : undefined;
 
     return { service, cost };
   }

@@ -1,4 +1,4 @@
-import { Database } from "../integrations/supabase/types";
+// import { Database } from "../integrations/supabase/types";
 import { createClient } from "@supabase/supabase-js";
 import { Logger } from "../utils/logger";
 import { ShopifyEmailService } from "./shopifyEmail";
@@ -26,6 +26,7 @@ export interface OrderCustomerNote {
   order_id: string;
   status: string;
   content: string | null;
+  note?: string | null; // Add missing note property
   is_automated?: boolean | null;
   triggered_by_rule_id?: string | null;
   created_at: string | null;

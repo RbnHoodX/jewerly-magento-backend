@@ -362,6 +362,17 @@ export interface OrderInsertData {
   ship_to_name?: string;
   delivery_method?: string;
   shopify_order_number?: string;
+  // Additional fields that may be present in database
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+  customization_notes?: string;
+  previous_order_id?: string;
+  how_did_you_hear?: string;
+  order_id?: string;
+  labor?: number;
+  cad_cost?: number;
+  general_cost?: number;
   // TODO: Add these fields to database schema
   // order_number?: string
   // notes?: string

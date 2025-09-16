@@ -20,6 +20,18 @@ export interface StatusModelRow {
 export class GoogleSheetsService {
   private logger: Logger;
   private sheets: any;
+  private knownStatuses = [
+    "Casting Order",
+    "Casting Received",
+    "Polishing & Finishing",
+    "Return For Refund Instructions",
+    "Return for replacement instructions",
+    "Return For Refund Received",
+    "Return for replacement received",
+    "Item Shipped",
+    "Casting Order Email Sent",
+    "Casting Order Delay - Jenny",
+  ];
 
   constructor() {
     this.logger = new Logger("GoogleSheetsService");
@@ -145,8 +157,8 @@ export class GoogleSheetsService {
             additional_recipients: row[7]
               ? row[7]
                   .split(",")
-                  .map((email: string) => email.trim())
-                  .filter((email) => email)
+                  .map((email: any) => email.trim())
+                  .filter((email: any) => email)
               : [],
             is_active: true,
           };
@@ -277,7 +289,7 @@ export class GoogleSheetsService {
         }
 
         // Check if this is the start of another data row
-        const isNextDataRow = knownStatuses.some((status) =>
+        const isNextDataRow = this.knownStatuses.some((status: string) =>
           nextLine.startsWith(status + ",")
         );
         if (isNextDataRow) {
@@ -368,7 +380,7 @@ export class GoogleSheetsService {
         }
 
         // Check if this is the start of another data row
-        const isNextDataRow = knownStatuses.some((status) =>
+        const isNextDataRow = this.knownStatuses.some((status: string) =>
           nextLine.startsWith(status + ",")
         );
         if (isNextDataRow) {

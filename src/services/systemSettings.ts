@@ -4,7 +4,7 @@ import { Logger } from "../utils/logger";
 import { ShopifyEmailService } from "./shopifyEmail";
 import { AutomationService } from "./automation";
 import { SyncService } from "./sync";
-import { GoogleSheetsService } from "./googleSheetsFixed";
+import { GoogleSheetsService } from "./googleSheets";
 import { StatusModelService } from "./statusModelService";
 import fs from "fs";
 import path from "path";
