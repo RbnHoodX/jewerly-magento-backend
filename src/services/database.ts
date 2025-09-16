@@ -16,7 +16,7 @@ export class DatabaseService {
     const { data, error } = await this.supabase
       .from("order_customer_notes")
       .select("id")
-      .eq("content", `Shopify Order: ${shopifyOrderId}`)
+      .like("content", `Shopify Order: ${shopifyOrderId}%`)
       .limit(1)
       .maybeSingle();
 

@@ -1,4 +1,4 @@
-import { ShopifyOrder, ShopifyProduct } from '../types'
+import { ShopifyOrder, ShopifyProduct } from "../types";
 
 export class ShopifyService {
   constructor(
@@ -8,84 +8,113 @@ export class ShopifyService {
   ) {}
 
   async fetchOrder(orderId: string): Promise<ShopifyOrder> {
-    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/orders/${orderId}.json`
-    
+    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/orders/${orderId}.json`;
+
     const res = await fetch(url, {
       headers: {
-        'X-Shopify-Access-Token': this.accessToken,
-        'Content-Type': 'application/json',
+        "X-Shopify-Access-Token": this.accessToken,
+        "Content-Type": "application/json",
       },
-    })
-    
-    if (!res.ok) throw new Error(`Fetch order failed: ${res.status}`)
-    
-    const json = (await res.json()) as { order?: ShopifyOrder }
-    return json.order as ShopifyOrder
+    });
+
+    if (!res.ok) throw new Error(`Fetch order failed: ${res.status}`);
+
+    const json = (await res.json()) as { order?: ShopifyOrder };
+    return json.order as ShopifyOrder;
   }
 
   async updateOrderTags(orderId: string, tags: string[]): Promise<void> {
-    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/orders/${orderId}.json`
-    
+    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/orders/${orderId}.json`;
+
     const res = await fetch(url, {
-      method: 'PUT',
+      method: "PUT",
       headers: {
-        'X-Shopify-Access-Token': this.accessToken,
-        'Content-Type': 'application/json',
+        "X-Shopify-Access-Token": this.accessToken,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({ 
-        order: { 
-          id: orderId, 
-          tags: tags.join(', ') 
-        } 
-      })
-    })
-    
-    if (!res.ok) throw new Error(`Update order tags failed: ${res.status} ${res.statusText}`)
+      body: JSON.stringify({
+        order: {
+          id: orderId,
+          tags: tags.join(", "),
+        },
+      }),
+    });
+
+    if (!res.ok)
+      throw new Error(
+        `Update order tags failed: ${res.status} ${res.statusText}`
+      );
   }
 
-  async retagOrder(orderId: string, importTag: string, processedTag: string): Promise<void> {
-    // Fetch existing tags
-    const order = await this.fetchOrder(orderId)
-    const tags: string[] = (order.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
-    const newTags = Array.from(new Set(
-      tags.filter(t => t.toLowerCase() !== importTag.toLowerCase()).concat([processedTag])
-    ))
+  async retagOrder(
+    orderId: string,
+    importTag: string,
+    processedTag: string
+  ): Promise<void> {
+    try {
+      // Fetch existing tags
+      const order = await this.fetchOrder(orderId);
+      const tags: string[] = (order.tags || "")
+        .split(",")
+        .map((t: string) => t.trim())
+        .filter(Boolean);
+      const newTags = Array.from(
+        new Set(
+          tags
+            .filter((t) => t.toLowerCase() !== importTag.toLowerCase())
+            .concat([processedTag])
+        )
+      );
 
-    await this.updateOrderTags(orderId, newTags)
+      console.log(`Retagging order ${orderId}:`, {
+        originalTags: order.tags,
+        importTag,
+        processedTag,
+        newTags,
+      });
+
+      await this.updateOrderTags(orderId, newTags);
+    } catch (error) {
+      console.error(`Error in retagOrder for ${orderId}:`, error);
+      throw error;
+    }
   }
 
   async fetchProduct(productId: number): Promise<ShopifyProduct> {
-    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/products/${productId}.json`
-    
+    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/products/${productId}.json`;
+
     const res = await fetch(url, {
       headers: {
-        'X-Shopify-Access-Token': this.accessToken,
-        'Content-Type': 'application/json',
+        "X-Shopify-Access-Token": this.accessToken,
+        "Content-Type": "application/json",
       },
-    })
-    
-    if (!res.ok) throw new Error(`Fetch product failed: ${res.status}`)
-    
-    const json = (await res.json()) as { product?: ShopifyProduct }
-    return json.product as ShopifyProduct
+    });
+
+    if (!res.ok) throw new Error(`Fetch product failed: ${res.status}`);
+
+    const json = (await res.json()) as { product?: ShopifyProduct };
+    return json.product as ShopifyProduct;
   }
 
   async getProductImageUrl(lineItem: any): Promise<string | null> {
     try {
       // If line item has a product_id, fetch the product to get images
       if (lineItem.product_id) {
-        const product = await this.fetchProduct(lineItem.product_id)
-        
+        const product = await this.fetchProduct(lineItem.product_id);
+
         // If there are images, return the first one
         if (product.images && product.images.length > 0) {
-          return product.images[0].src
+          return product.images[0].src;
         }
       }
-      
-      return null
+
+      return null;
     } catch (error) {
-      console.warn(`Failed to fetch image for product ${lineItem.product_id}:`, error)
-      return null
+      console.warn(
+        `Failed to fetch image for product ${lineItem.product_id}:`,
+        error
+      );
+      return null;
     }
   }
 }

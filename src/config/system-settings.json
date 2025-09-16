@@ -4,5 +4,8 @@
   "automationEnabled": false,
   "emailNotifications": true,
   "googleSheetsUrl": "",
-  "lastSyncTime": "2025-09-15T19:47:00.821Z"
+  "shopifyImportTag": "new order",
+  "shopifyProcessedTag": "imported-to-admin",
+  "lastSyncTime": "2025-09-16T00:08:05.545Z",
+  "lastAutomationTime": "2025-09-15T21:45:05.958Z"
 }

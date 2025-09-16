@@ -19,6 +19,8 @@ export interface SystemSettings {
   automationEnabled: boolean;
   emailNotifications: boolean;
   googleSheetsUrl: string;
+  shopifyImportTag: string;
+  shopifyProcessedTag: string;
   lastSyncTime?: string;
   lastAutomationTime?: string;
 }
@@ -38,6 +40,8 @@ export class SystemSettingsService {
     automationEnabled: false,
     emailNotifications: true,
     googleSheetsUrl: "",
+    shopifyImportTag: "new order",
+    shopifyProcessedTag: "imported-to-admin",
   };
 
   /**
@@ -109,7 +113,14 @@ export class SystemSettingsService {
     try {
       this.logger.log("info", "Running automation once");
 
-      const automationService = new AutomationService();
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Supabase configuration missing");
+      }
+
+      const automationService = new AutomationService(supabaseUrl, supabaseKey);
       const result = await automationService.runAutomation();
 
       this.settings.lastAutomationTime = new Date().toISOString();
