@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { config } from "dotenv";
 import { SystemSettingsService } from "../services/systemSettings";
+import { SystemCronService } from "../services/systemCron";
 import { Logger } from "../utils/logger";
 
 // Load environment variables
@@ -13,12 +14,29 @@ const app = express();
 const logger = new Logger("SystemSettingsAPI");
 const PORT = process.env.API_PORT || 3002;
 
+// Initialize cron service
+let cronService: SystemCronService;
+try {
+  cronService = new SystemCronService();
+  logger.log("info", "Cron service initialized successfully");
+} catch (error) {
+  logger.log("error", "Failed to initialize cron service", { error });
+  process.exit(1);
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // Load settings on startup
 SystemSettingsService.loadSettings();
+
+// Start cron jobs if enabled
+const settings = SystemSettingsService.getSettings();
+if (settings.syncEnabled || settings.automationEnabled) {
+  cronService.start();
+  logger.log("info", "Cron jobs started on server startup");
+}
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -46,6 +64,11 @@ app.get("/api/settings", (req, res) => {
 app.post("/api/settings", (req, res) => {
   try {
     const result = SystemSettingsService.updateSettings(req.body);
+    
+    // Restart cron jobs when settings change
+    cronService.restart();
+    logger.log("info", "Settings updated and cron jobs restarted");
+    
     res.json(result);
   } catch (error) {
     logger.log("error", "Failed to update settings", { error });
@@ -165,6 +188,79 @@ app.post("/api/import/status-model", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Import failed",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Cron control endpoints
+app.get("/api/cron/status", (req, res) => {
+  try {
+    const status = cronService.getStatus();
+    res.json({
+      success: true,
+      message: "Cron status retrieved successfully",
+      data: status,
+    });
+  } catch (error) {
+    logger.log("error", "Failed to get cron status", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to get cron status",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+app.post("/api/cron/start", (req, res) => {
+  try {
+    cronService.start();
+    logger.log("info", "Cron jobs started via API");
+    res.json({
+      success: true,
+      message: "Cron jobs started successfully",
+    });
+  } catch (error) {
+    logger.log("error", "Failed to start cron jobs", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to start cron jobs",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+app.post("/api/cron/stop", (req, res) => {
+  try {
+    cronService.stop();
+    logger.log("info", "Cron jobs stopped via API");
+    res.json({
+      success: true,
+      message: "Cron jobs stopped successfully",
+    });
+  } catch (error) {
+    logger.log("error", "Failed to stop cron jobs", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to stop cron jobs",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+app.post("/api/cron/restart", (req, res) => {
+  try {
+    cronService.restart();
+    logger.log("info", "Cron jobs restarted via API");
+    res.json({
+      success: true,
+      message: "Cron jobs restarted successfully",
+    });
+  } catch (error) {
+    logger.log("error", "Failed to restart cron jobs", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to restart cron jobs",
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }
