@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "build": "bun run src/api/server.ts",
+    "start": "bun run src/api/server.ts",
+    "dev": "bun --watch src/api/server.ts",
     "sync:once": "tsx src/index.ts --once",
     "cleanup:duplicates": "tsx src/cleanup-duplicates.ts",
     "cleanup:tracking-notes": "tsx src/cleanup-tracking-notes.ts",
