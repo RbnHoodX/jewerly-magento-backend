@@ -2,7 +2,7 @@
   "cronJobInterval": 5,
   "syncEnabled": true,
   "automationEnabled": true,
-  "emailNotifications": true,
+  "emailNotifications": false,
   "googleSheetsUrl": "",
   "shopifyImportTag": "new order",
   "shopifyProcessedTag": "imported-to-admin",
