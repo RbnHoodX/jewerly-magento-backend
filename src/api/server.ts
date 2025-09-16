@@ -12,7 +12,7 @@ config();
 
 const app = express();
 const logger = new Logger("SystemSettingsAPI");
-const PORT = process.env.API_PORT || 3002;
+const PORT = process.env.API_PORT || 3003;
 
 // Initialize cron service
 let cronService: SystemCronService;
@@ -64,11 +64,11 @@ app.get("/api/settings", (req, res) => {
 app.post("/api/settings", (req, res) => {
   try {
     const result = SystemSettingsService.updateSettings(req.body);
-    
+
     // Restart cron jobs when settings change
     cronService.restart();
     logger.log("info", "Settings updated and cron jobs restarted");
-    
+
     res.json(result);
   } catch (error) {
     logger.log("error", "Failed to update settings", { error });
@@ -261,6 +261,86 @@ app.post("/api/cron/restart", (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to restart cron jobs",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Status model endpoints
+app.get("/api/status-model/current", async (req, res) => {
+  try {
+    const { StatusModelService } = await import(
+      "../services/statusModelService"
+    );
+    const statusModelService = new StatusModelService();
+    const data = await statusModelService.getCurrentData();
+
+    res.json({
+      success: true,
+      message: "Status model data retrieved successfully",
+      data: {
+        count: data.length,
+        records: data,
+      },
+    });
+  } catch (error) {
+    logger.log("error", "Failed to get status model data", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to get status model data",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Email logs endpoints
+app.get("/api/email/logs", async (req, res) => {
+  try {
+    logger.log("info", "🔍 API: Starting email logs request", {
+      timestamp: new Date().toISOString(),
+    });
+
+    const { EmailLoggingService } = await import(
+      "../services/emailLoggingService"
+    );
+    logger.log("info", "🔍 API: EmailLoggingService imported successfully");
+
+    const emailLoggingService = new EmailLoggingService();
+    logger.log("info", "🔍 API: EmailLoggingService instance created");
+
+    logger.log("info", "🔍 API: Calling emailLoggingService.getEmailLogs(50)");
+    const logs = await emailLoggingService.getEmailLogs(50);
+
+    logger.log("info", "🔍 API: EmailLoggingService returned data", {
+      logsCount: logs ? logs.length : 0,
+      logsData: logs,
+      logsType: typeof logs,
+      logsIsArray: Array.isArray(logs),
+    });
+
+    const response = {
+      success: true,
+      message: "Email logs retrieved successfully",
+      data: {
+        count: logs.length,
+        logs: logs,
+      },
+    };
+
+    logger.log("info", "🔍 API: Sending response", {
+      responseData: response,
+      responseType: typeof response,
+    });
+
+    res.json(response);
+  } catch (error) {
+    logger.log("error", "🔍 API: Failed to get email logs", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    res.status(500).json({
+      success: false,
+      message: "Failed to get email logs",
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }

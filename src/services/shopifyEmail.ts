@@ -1,6 +1,7 @@
 import { Logger } from "../utils/logger";
 import sgMail from "@sendgrid/mail";
 import nodemailer from "nodemailer";
+import { EmailLoggingService } from "./emailLoggingService";
 
 export interface EmailData {
   to: string;
@@ -14,6 +15,7 @@ export interface EmailData {
 
 export class ShopifyEmailService {
   private logger: Logger;
+  private emailLoggingService: EmailLoggingService;
   private shopifyAccessToken: string;
   private shopifyShopDomain: string;
   private sendGridApiKey: string;
@@ -26,6 +28,7 @@ export class ShopifyEmailService {
 
   constructor() {
     this.logger = new Logger("ShopifyEmailService");
+    this.emailLoggingService = new EmailLoggingService();
 
     // Get credentials from environment variables
     this.shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN || "";
@@ -60,16 +63,36 @@ export class ShopifyEmailService {
    * Send an email via SendGrid or Shopify API
    */
   async sendEmail(emailData: EmailData): Promise<string> {
+    const startTime = Date.now();
+    let emailId: string;
+    let status: "sent" | "failed" | "pending" = "pending";
+    let provider: "gmail" | "sendgrid" | "shopify" = "gmail";
+    let errorMessage: string | undefined;
+
     try {
+      // Log email attempt
+      await this.emailLoggingService.logEmail({
+        timestamp: new Date().toISOString(),
+        recipient: emailData.to,
+        subject: emailData.subject,
+        status: "pending",
+        provider: "gmail", // Will be updated based on actual provider used
+        order_id: emailData.orderId,
+        customer_id: emailData.customerId,
+      });
+
       if (this.useSendGrid) {
-        return await this.sendEmailViaSendGrid(emailData);
+        provider = "sendgrid";
+        emailId = await this.sendEmailViaSendGrid(emailData);
       } else if (this.useGmail) {
-        return await this.sendEmailViaGmail(emailData);
+        provider = "gmail";
+        emailId = await this.sendEmailViaGmail(emailData);
       } else if (this.isConfigured) {
-        return await this.sendEmailViaShopifyAPI(emailData);
+        provider = "shopify";
+        emailId = await this.sendEmailViaShopifyAPI(emailData);
       } else {
         // Return a mock email ID for testing purposes when no service is configured
-        const mockEmailId = `mock_email_${Date.now()}_${Math.random()
+        emailId = `mock_email_${Date.now()}_${Math.random()
           .toString(36)
           .substr(2, 9)}`;
 
@@ -77,20 +100,49 @@ export class ShopifyEmailService {
           "info",
           "Mock email sent (no email service configured)",
           {
-            emailId: mockEmailId,
+            emailId: emailId,
             to: emailData.to,
             subject: emailData.subject,
           }
         );
-
-        return mockEmailId;
       }
+
+      status = "sent";
+
+      // Log successful email
+      await this.emailLoggingService.logEmail({
+        timestamp: new Date().toISOString(),
+        recipient: emailData.to,
+        subject: emailData.subject,
+        status: "sent",
+        provider: provider,
+        order_id: emailData.orderId,
+        customer_id: emailData.customerId,
+      });
+
+      return emailId;
     } catch (error) {
+      status = "failed";
+      errorMessage = error instanceof Error ? error.message : String(error);
+
       this.logger.log("error", "Failed to send email", {
-        error: error instanceof Error ? error.message : error,
+        error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined,
         name: error instanceof Error ? error.name : undefined,
       });
+
+      // Log failed email
+      await this.emailLoggingService.logEmail({
+        timestamp: new Date().toISOString(),
+        recipient: emailData.to,
+        subject: emailData.subject,
+        status: "failed",
+        provider: provider,
+        error_message: errorMessage,
+        order_id: emailData.orderId,
+        customer_id: emailData.customerId,
+      });
+
       throw error;
     }
   }

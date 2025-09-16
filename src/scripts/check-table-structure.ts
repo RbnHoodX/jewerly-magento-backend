@@ -7,75 +7,42 @@ import { Logger } from "../utils/logger";
 const logger = new Logger("CheckTableStructure");
 
 async function checkTableStructure() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    logger.error("Missing Supabase credentials");
-    process.exit(1);
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
   try {
-    // Try to get the structure by selecting all columns
-    logger.info("Checking order_customer_notes table structure...");
+    logger.info("Checking email_logs table structure...");
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Missing Supabase environment variables");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Try to get all records without ordering to see what columns exist
+    logger.info("Fetching all email_logs records...");
 
     const { data, error } = await supabase
-      .from("order_customer_notes")
+      .from("email_logs")
       .select("*")
-      .limit(1);
+      .limit(5);
 
-    if (error) {
-      logger.error("Error checking table structure:", error);
+    logger.info("Query result:", {
+      hasError: !!error,
+      errorMessage: error ? error.message : null,
+      dataLength: data ? data.length : 0,
+      data: data,
+    });
 
-      // Try to get just the column names
-      logger.info("Trying to get column names...");
-      const { data: columns, error: columnError } = await supabase
-        .from("order_customer_notes")
-        .select("id")
-        .limit(1);
-
-      if (columnError) {
-        logger.error("Cannot access table at all:", columnError);
-      } else {
-        logger.info("Table exists, checking individual columns...");
-
-        // Test each column we expect
-        const expectedColumns = [
-          "id",
-          "order_id",
-          "status",
-          "note",
-          "content",
-          "is_automated",
-          "triggered_by_rule_id",
-          "created_at",
-          "created_by",
-        ];
-
-        for (const col of expectedColumns) {
-          try {
-            const { error: colError } = await supabase
-              .from("order_customer_notes")
-              .select(col)
-              .limit(1);
-
-            if (colError) {
-              logger.info(`  Column '${col}': NOT FOUND`);
-            } else {
-              logger.info(`  Column '${col}': EXISTS`);
-            }
-          } catch (err) {
-            logger.info(`  Column '${col}': ERROR - ${err}`);
-          }
-        }
-      }
-    } else {
-      logger.info("Table structure (sample record):", data);
+    if (data && data.length > 0) {
+      logger.info("Sample record structure:", {
+        sampleRecord: data[0],
+        columns: Object.keys(data[0]),
+      });
     }
   } catch (error) {
-    logger.error("Check failed:", error);
+    logger.error("Table structure check failed:", error);
+    process.exit(1);
   }
 }
 
