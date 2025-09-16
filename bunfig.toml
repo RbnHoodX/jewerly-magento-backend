@@ -6,10 +6,6 @@ registry = "https://registry.npmjs.org/"
 # Enable caching for faster installs
 disable = false
 
-[run]
-# Enable hot reload for development
-bun = "bun --hot"
-
 [test]
 # Test configuration
 preload = ["./test/setup.ts"]
