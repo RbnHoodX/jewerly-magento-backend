@@ -2,6 +2,11 @@ import { Database } from "../integrations/supabase/types";
 import { createClient } from "@supabase/supabase-js";
 import { Logger } from "../utils/logger";
 import { ShopifyEmailService } from "./shopifyEmail";
+import {
+  formatDateTimeToEST,
+  formatDateToEST,
+  formatTimeToEST,
+} from "../utils/timezone";
 
 export interface StatusRule {
   id: string;
@@ -377,7 +382,11 @@ export class AutomationService {
 
     // Private email notification (always send if private_email is configured)
     if (rule.private_email) {
-      const privateEmailContent = this.generatePrivateEmailContent(order, rule, newNote);
+      const privateEmailContent = this.generatePrivateEmailContent(
+        order,
+        rule,
+        newNote
+      );
       emails.push({
         type: "private" as const,
         recipient: rule.private_email,
@@ -525,15 +534,16 @@ export class AutomationService {
     rule: StatusRule,
     newNote: OrderCustomerNote
   ): { subject: string; message: string } {
-    const orderNumber = order.shopify_order_number || order.id.slice(-8).toUpperCase();
+    const orderNumber =
+      order.shopify_order_number || order.id.slice(-8).toUpperCase();
     const customerName = order.customers.name || "Unknown Customer";
     const customerEmail = order.customers.email || "No email";
     const status = newNote.status;
     const waitTime = rule.wait_time_business_days;
-    const currentTime = new Date().toLocaleString();
-    
+    const currentTime = formatDateTimeToEST(new Date());
+
     const subject = `Order Update: #${orderNumber} - ${rule.status} → ${status}`;
-    
+
     const message = `Order Update Notification
 
 Order #${orderNumber} has been updated:
@@ -543,7 +553,7 @@ Order #${orderNumber} has been updated:
 - Wait Time: ${waitTime} business days
 - Updated: ${currentTime}
 
-${rule.description ? `Description: ${rule.description}` : ''}
+${rule.description ? `Description: ${rule.description}` : ""}
 
 This is an automated notification from the order management system.`;
 
@@ -567,8 +577,8 @@ This is an automated notification from the order management system.`;
       "{{ customer_email }}": order.customers.email || "",
       "{{ status }}": note.status,
       "{{ note }}": note.note || "",
-      "{{ date }}": new Date().toLocaleDateString(),
-      "{{ time }}": new Date().toLocaleTimeString(),
+      "{{ date }}": formatDateToEST(new Date()),
+      "{{ time }}": formatTimeToEST(new Date()),
     };
 
     let result = content;
