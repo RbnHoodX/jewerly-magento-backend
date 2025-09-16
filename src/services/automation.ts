@@ -375,10 +375,21 @@ export class AutomationService {
       });
     }
 
-    // Private email copy (only if we have email content)
-    if (rule.private_email && rule.email_subject && rule.email_custom_message) {
+    // Private email notification (always send if private_email is configured)
+    if (rule.private_email) {
+      const privateEmailContent = this.generatePrivateEmailContent(order, rule, newNote);
       emails.push({
         type: "private" as const,
+        recipient: rule.private_email,
+        subject: privateEmailContent.subject,
+        message: privateEmailContent.message,
+      });
+    }
+
+    // Private email copy (only if we have email content and it's different from private notification)
+    if (rule.private_email && rule.email_subject && rule.email_custom_message) {
+      emails.push({
+        type: "private_copy" as const,
         recipient: rule.private_email,
         subject: `[COPY] ${this.replacePlaceholders(
           rule.email_subject,
@@ -433,7 +444,7 @@ export class AutomationService {
     orderId: string,
     ruleId: string,
     email: {
-      type: "customer" | "private" | "additional";
+      type: "customer" | "private" | "private_copy" | "additional";
       recipient: string;
       subject: string;
       message: string;
@@ -504,6 +515,39 @@ export class AutomationService {
         error,
       });
     }
+  }
+
+  /**
+   * Generate private email content for status updates
+   */
+  private generatePrivateEmailContent(
+    order: OrderData,
+    rule: StatusRule,
+    newNote: OrderCustomerNote
+  ): { subject: string; message: string } {
+    const orderNumber = order.shopify_order_number || order.id.slice(-8).toUpperCase();
+    const customerName = order.customers.name || "Unknown Customer";
+    const customerEmail = order.customers.email || "No email";
+    const status = newNote.status;
+    const waitTime = rule.wait_time_business_days;
+    const currentTime = new Date().toLocaleString();
+    
+    const subject = `Order Update: #${orderNumber} - ${rule.status} → ${status}`;
+    
+    const message = `Order Update Notification
+
+Order #${orderNumber} has been updated:
+- From: ${rule.status}
+- To: ${status}
+- Customer: ${customerName} (${customerEmail})
+- Wait Time: ${waitTime} business days
+- Updated: ${currentTime}
+
+${rule.description ? `Description: ${rule.description}` : ''}
+
+This is an automated notification from the order management system.`;
+
+    return { subject, message };
   }
 
   /**
