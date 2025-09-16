@@ -121,7 +121,6 @@ export interface ShopifyLineItem {
   requires_shipping?: boolean;
   taxable?: boolean;
   fulfillment_status?: string;
-  image?: string;
   properties?: Array<{
     name: string;
     value: string;

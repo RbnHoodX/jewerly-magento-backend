@@ -234,35 +234,29 @@ export class SyncService {
         : undefined,
     };
 
-    // Prepare order items with product images
+    // Prepare order items with images
+    this.logger.log(
+      "info",
+      `Processing ${order.line_items.length} line items for order ${order.name}`
+    );
+
     const orderItems: OrderItemInsertData[] = await Promise.all(
       order.line_items.map(async (lineItem) => {
-        this.logger.log("debug", `Processing line item: ${lineItem.title}`, {
-          lineItemKeys: Object.keys(lineItem),
-          productId: lineItem.product_id,
-          hasImage: !!lineItem.image,
-        });
+        // Fetch product image URL
+        const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
 
-        // Fetch product image if product_id is available
-        let productImage: string | null = null;
-        if (lineItem.product_id) {
-          productImage = await this.fetchProductDetails(lineItem.product_id);
-          this.logger.log(
-            "debug",
-            `Fetched image for product ${lineItem.product_id}:`,
-            {
-              hasImage: !!productImage,
-              image: productImage,
-            }
-          );
-        }
+        this.logger.log("debug", `Line item: ${lineItem.title}`, {
+          sku: lineItem.sku,
+          productId: lineItem.product_id,
+          imageUrl: imageUrl || "No image found",
+        });
 
         return {
           sku: lineItem.sku,
           details: lineItem.title,
           price: parseFloat(lineItem.price),
           qty: lineItem.quantity,
-          image: productImage, // Use fetched product image
+          image: imageUrl || undefined,
         };
       })
     );
@@ -365,41 +359,76 @@ export class SyncService {
   }
 
   /**
-   * Fetch product details from Shopify API
+   * Process existing order to update order items with images
    */
-  private async fetchProductDetails(productId: number): Promise<string | null> {
+  private async processExistingOrder(
+    order: ShopifyOrder
+  ): Promise<"success" | "skipped"> {
     try {
-      const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${process.env.SHOPIFY_API_VERSION}/products/${productId}.json`;
-
-      const response = await fetch(url, {
-        headers: {
-          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
+      // Get existing order ID
+      const existingOrderId = await this.databaseService.getOrderIdByShopifyId(
+        order.id.toString()
+      );
+      if (!existingOrderId) {
         this.logger.log(
           "warn",
-          `Failed to fetch product ${productId}: ${response.status}`
+          `Could not find existing order ID for ${order.name}`
         );
-        return null;
+        return "skipped";
       }
 
-      const data = await response.json();
-      const product = data.product;
+      this.logger.log(
+        "info",
+        `Processing existing order ${order.name} for image updates`
+      );
 
-      // Get the first image from the product
-      if (product.images && product.images.length > 0) {
-        return product.images[0].src;
-      }
+      // Process order items with images
+      this.logger.log(
+        "info",
+        `Processing ${order.line_items.length} line items for order ${order.name}`
+      );
 
-      return null;
+      const orderItems: OrderItemInsertData[] = await Promise.all(
+        order.line_items.map(async (lineItem) => {
+          // Fetch product image URL
+          const imageUrl = await this.shopifyService.getProductImageUrl(
+            lineItem
+          );
+
+          this.logger.log("debug", `Line item: ${lineItem.title}`, {
+            sku: lineItem.sku,
+            productId: lineItem.product_id,
+            imageUrl: imageUrl || "No image found",
+          });
+
+          return {
+            sku: lineItem.sku,
+            details: lineItem.title,
+            price: parseFloat(lineItem.price),
+            qty: lineItem.quantity,
+            image: imageUrl || undefined,
+          };
+        })
+      );
+
+      // Update only the order items with images
+      await this.databaseService.updateOrderItemsWithImages(
+        existingOrderId,
+        orderItems
+      );
+
+      this.logger.log(
+        "info",
+        `Successfully updated order items with images for ${order.name}`
+      );
+      return "success";
     } catch (error) {
-      this.logger.log("warn", `Error fetching product ${productId}:`, {
-        error,
-      });
-      return null;
+      this.logger.log(
+        "error",
+        `Failed to process existing order ${order.name}`,
+        { error }
+      );
+      return "skipped";
     }
   }
 
