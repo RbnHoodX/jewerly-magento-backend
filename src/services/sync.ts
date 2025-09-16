@@ -182,9 +182,7 @@ export class SyncService {
     order: ShopifyOrder
   ): Promise<"success" | "skipped"> {
     // Check if order already exists using DatabaseService
-    const orderExists = await this.databaseService.checkOrderExists(
-      order.id.toString()
-    );
+    const orderExists = await this.databaseService.checkOrderExists(order.name);
 
     this.logger.log(
       "debug",

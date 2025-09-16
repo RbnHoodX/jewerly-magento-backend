@@ -11,12 +11,11 @@ export class DatabaseService {
   constructor(private supabase: SupabaseClient) {}
 
   async checkOrderExists(shopifyOrderId: string): Promise<boolean> {
-    // Check if order already exists by looking for a comment or note that contains the Shopify order ID
-    // We'll use the order_customer_notes table to store the Shopify order ID as a reference
+    // Check if order already exists by looking for the shopify_order_number in the orders table
     const { data, error } = await this.supabase
-      .from("order_customer_notes")
+      .from("orders")
       .select("id")
-      .like("content", `Shopify Order: ${shopifyOrderId}%`)
+      .eq("shopify_order_number", shopifyOrderId)
       .limit(1)
       .maybeSingle();
 
