@@ -51,6 +51,12 @@ const initializeCronService = async () => {
 app.use(cors());
 app.use(express.json());
 
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${req.ip}`);
+  next();
+});
+
 // Load settings on startup
 SystemSettingsService.loadSettings();
 
@@ -81,6 +87,32 @@ app.get("/test", (req, res) => {
     message: "Test endpoint working",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development"
+  });
+});
+
+// Debug endpoint
+app.get("/debug", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Debug endpoint working",
+    timestamp: new Date().toISOString(),
+    server: {
+      port: PORT,
+      environment: process.env.NODE_ENV || "development",
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+    },
+    request: {
+      ip: req.ip,
+      ips: req.ips,
+      headers: req.headers,
+      method: req.method,
+      url: req.url,
+      originalUrl: req.originalUrl,
+    }
   });
 });
 
@@ -420,6 +452,17 @@ app.get("/api/email/logs", async (req, res) => {
   }
 });
 
+// Catch-all route for unhandled requests
+app.use("*", (req, res) => {
+  console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+    path: req.originalUrl,
+    method: req.method,
+  });
+});
+
 // Error handling middleware
 app.use(
   (
@@ -428,7 +471,8 @@ app.use(
     res: express.Response,
     next: express.NextFunction
   ) => {
-    logger.log("error", "Unhandled error", { error });
+    console.error(`Error handling ${req.method} ${req.path}:`, error);
+    logger.log("error", "Unhandled error", { error, path: req.path, method: req.method });
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -460,6 +504,8 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🧪 Test endpoint: http://localhost:${PORT}/test`);
   console.log(`🔒 CORS enabled for all origins`);
   console.log("🚀 Ready to accept requests!");
+  console.log(`📡 Server bound to: 0.0.0.0:${PORT}`);
+  console.log(`🌍 External access: http://[your-ip]:${PORT}/health`);
 
   logger.log("info", `System Settings API server running on port ${PORT}`);
   logger.log(
