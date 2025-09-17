@@ -10,9 +10,21 @@ import { Logger } from "../utils/logger";
 // Load environment variables
 config();
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
 const app = express();
 const logger = new Logger("SystemSettingsAPI");
-const PORT = process.env.PORT || process.env.API_PORT || 3003;
+const PORT = parseInt(process.env.PORT || process.env.API_PORT || "3003", 10);
 
 // Log startup information
 console.log("🚀 Starting Shopify Database Sync API Server");
@@ -21,14 +33,19 @@ console.log(`🌐 Port: ${PORT}`);
 console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
 
 // Initialize cron service
-let cronService: SystemCronService;
-try {
-  cronService = new SystemCronService();
-  logger.log("info", "Cron service initialized successfully");
-} catch (error) {
-  logger.log("error", "Failed to initialize cron service", { error });
-  process.exit(1);
-}
+let cronService: SystemCronService | null = null;
+
+// Initialize cron service asynchronously to prevent blocking
+const initializeCronService = async () => {
+  try {
+    cronService = new SystemCronService();
+    logger.log("info", "Cron service initialized successfully");
+  } catch (error) {
+    logger.log("error", "Failed to initialize cron service", { error });
+    // Don't exit the process, just log the error and continue without cron
+    console.warn("⚠️  Cron service failed to initialize, continuing without cron jobs");
+  }
+};
 
 // Middleware
 app.use(cors());
@@ -37,12 +54,16 @@ app.use(express.json());
 // Load settings on startup
 SystemSettingsService.loadSettings();
 
-// Start cron jobs if enabled
-const settings = SystemSettingsService.getSettings();
-if (settings.syncEnabled || settings.automationEnabled) {
-  cronService.start();
-  logger.log("info", "Cron jobs started on server startup");
-}
+// Start cron jobs if enabled (after cron service is initialized)
+const startCronJobsIfEnabled = () => {
+  if (cronService) {
+    const settings = SystemSettingsService.getSettings();
+    if (settings.syncEnabled || settings.automationEnabled) {
+      cronService.start();
+      logger.log("info", "Cron jobs started on server startup");
+    }
+  }
+};
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -51,6 +72,16 @@ app.get("/health", (req, res) => {
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Test endpoint
+app.get("/test", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    message: "Test endpoint working",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development"
+  });
 });
 
 // System settings endpoints
@@ -76,8 +107,12 @@ app.post("/api/settings", (req, res) => {
     const result = SystemSettingsService.updateSettings(req.body);
 
     // Restart cron jobs when settings change
-    cronService.restart();
-    logger.log("info", "Settings updated and cron jobs restarted");
+    if (cronService) {
+      cronService.restart();
+      logger.log("info", "Settings updated and cron jobs restarted");
+    } else {
+      logger.log("warn", "Cron service not available, settings updated but cron jobs not restarted");
+    }
 
     res.json(result);
   } catch (error) {
@@ -206,6 +241,14 @@ app.post("/api/import/status-model", async (req, res) => {
 // Cron control endpoints
 app.get("/api/cron/status", (req, res) => {
   try {
+    if (!cronService) {
+      return res.json({
+        success: false,
+        message: "Cron service not available",
+        data: null,
+      });
+    }
+    
     const status = cronService.getStatus();
     res.json({
       success: true,
@@ -224,6 +267,13 @@ app.get("/api/cron/status", (req, res) => {
 
 app.post("/api/cron/start", (req, res) => {
   try {
+    if (!cronService) {
+      return res.status(503).json({
+        success: false,
+        message: "Cron service not available",
+      });
+    }
+    
     cronService.start();
     logger.log("info", "Cron jobs started via API");
     res.json({
@@ -242,6 +292,13 @@ app.post("/api/cron/start", (req, res) => {
 
 app.post("/api/cron/stop", (req, res) => {
   try {
+    if (!cronService) {
+      return res.status(503).json({
+        success: false,
+        message: "Cron service not available",
+      });
+    }
+    
     cronService.stop();
     logger.log("info", "Cron jobs stopped via API");
     res.json({
@@ -260,6 +317,13 @@ app.post("/api/cron/stop", (req, res) => {
 
 app.post("/api/cron/restart", (req, res) => {
   try {
+    if (!cronService) {
+      return res.status(503).json({
+        success: false,
+        message: "Cron service not available",
+      });
+    }
+    
     cronService.restart();
     logger.log("info", "Cron jobs restarted via API");
     res.json({
@@ -373,8 +437,23 @@ app.use(
   }
 );
 
+// Graceful shutdown handler
+const gracefulShutdown = (signal: string) => {
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+  
+  if (cronService) {
+    cronService.stop();
+    console.log("Cron jobs stopped");
+  }
+  
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Start server
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", async () => {
   console.log("✅ Server started successfully!");
   console.log(`🌐 Server running on port ${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
@@ -392,6 +471,22 @@ app.listen(PORT, "0.0.0.0", () => {
     `Test endpoint available at: http://localhost:${PORT}/test`
   );
   logger.log("info", `CORS enabled for all origins`);
+
+  // Initialize cron service asynchronously after server starts
+  console.log("🔄 Initializing cron service...");
+  await initializeCronService();
+  startCronJobsIfEnabled();
+  console.log("✅ Cron service initialization complete");
+});
+
+// Handle server errors
+server.on('error', (error: any) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`);
+  } else {
+    console.error('❌ Server error:', error);
+  }
+  process.exit(1);
 });
 
 export default app;
