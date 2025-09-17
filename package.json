@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun run src/api/server.ts",
-    "start": "bun run src/api/server.ts",
+    "build": "bun build src/api/server.ts --outdir dist --target bun --minify",
+    "build:dev": "bun build src/api/server.ts --outdir dist --target bun",
+    "start": "bun run dist/server.js",
     "dev": "bun --watch src/api/server.ts",
     "sync:once": "tsx src/index.ts --once",
     "cleanup:duplicates": "tsx src/cleanup-duplicates.ts",
