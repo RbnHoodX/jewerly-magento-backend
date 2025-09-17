@@ -9,7 +9,7 @@ import { StatusModelService } from "./statusModelService";
 import fs from "fs";
 import path from "path";
 
-const configDir = path.join(process.cwd(), 'src', 'config');
+const configDir = path.join(process.cwd(), "src", "config");
 
 export interface SystemSettings {
   cronJobInterval: number; // in minutes
@@ -33,9 +33,9 @@ export interface OperationResult {
 export class SystemSettingsService {
   private static logger = new Logger("SystemSettingsService");
   private static settings: SystemSettings = {
-    cronJobInterval: 10, // Default to 10 minutes for more frequent checks
-    syncEnabled: true,   // Enable sync by default
-    automationEnabled: true, // Enable automation by default
+    cronJobInterval: 60,
+    syncEnabled: false,
+    automationEnabled: false,
     emailNotifications: true,
     googleSheetsUrl: "",
     shopifyImportTag: "new order",
@@ -287,56 +287,6 @@ export class SystemSettingsService {
         message: "Failed to get system status",
         error: error instanceof Error ? error.message : "Unknown error",
       };
-    }
-  }
-
-  /**
-   * Reset settings to default values
-   */
-  static resetToDefaults(): void {
-    try {
-      this.settings = {
-        cronJobInterval: 10,
-        syncEnabled: true,
-        automationEnabled: true,
-        emailNotifications: true,
-        googleSheetsUrl: "",
-        shopifyImportTag: "new order",
-        shopifyProcessedTag: "imported-to-admin",
-      };
-      
-      this.saveSettings();
-      
-      this.logger.log("info", "Settings reset to defaults", {
-        path: path.join(configDir, "system-settings.json"),
-      });
-    } catch (error) {
-      this.logger.log("error", "Failed to reset settings", {
-        error: error instanceof Error ? error.message : error,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Enable sync and automation
-   */
-  static enableSyncAndAutomation(): void {
-    try {
-      this.settings.syncEnabled = true;
-      this.settings.automationEnabled = true;
-      
-      this.saveSettings();
-      
-      this.logger.log("info", "Sync and automation enabled", {
-        syncEnabled: this.settings.syncEnabled,
-        automationEnabled: this.settings.automationEnabled,
-      });
-    } catch (error) {
-      this.logger.log("error", "Failed to enable sync and automation", {
-        error: error instanceof Error ? error.message : error,
-      });
-      throw error;
     }
   }
 

@@ -11,14 +11,14 @@ import { Logger } from "../utils/logger";
 config();
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
   process.exit(1);
 });
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
   process.exit(1);
 });
 
@@ -29,10 +29,10 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Log the port configuration for debugging
 console.log(`🔧 Railway Port Configuration:`, {
-  'process.env.PORT': process.env.PORT,
-  'Final PORT': PORT,
-  'Type': typeof PORT,
-  'Is Railway': !!process.env.RAILWAY_ENVIRONMENT
+  "process.env.PORT": process.env.PORT,
+  "Final PORT": PORT,
+  Type: typeof PORT,
+  "Is Railway": !!process.env.RAILWAY_ENVIRONMENT,
 });
 
 // Log startup information
@@ -45,7 +45,7 @@ console.log(`🔍 Environment variables:`, {
   API_PORT: process.env.API_PORT,
   NODE_ENV: process.env.NODE_ENV,
   RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
-  RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN
+  RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN,
 });
 
 // Initialize cron service
@@ -59,65 +59,79 @@ const initializeCronService = async () => {
   } catch (error) {
     logger.log("error", "Failed to initialize cron service", { error });
     // Don't exit the process, just log the error and continue without cron
-    console.warn("⚠️  Cron service failed to initialize, continuing without cron jobs");
+    console.warn(
+      "⚠️  Cron service failed to initialize, continuing without cron jobs"
+    );
   }
 };
 
 // Manual CORS handler for maximum compatibility
 app.use((req, res, next) => {
   // Set CORS headers
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning, User-Agent, Cache-Control, Pragma, X-Custom-Header, Access-Control-Request-Headers, Access-Control-Request-Method');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Expose-Headers', 'Content-Length, X-Foo, X-Bar');
-  
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+  );
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning, User-Agent, Cache-Control, Pragma, X-Custom-Header, Access-Control-Request-Headers, Access-Control-Request-Method"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Expose-Headers", "Content-Length, X-Foo, X-Bar");
+
   // Handle preflight requests
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
   }
-  
+
   next();
 });
 
 // Also use the cors middleware as backup
-app.use(cors({
-  origin: true, // Allow all origins
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With', 
-    'Accept', 
-    'Origin',
-    'ngrok-skip-browser-warning', // Allow ngrok header
-    'User-Agent',
-    'Cache-Control',
-    'Pragma',
-    'X-Custom-Header',
-    'Access-Control-Request-Headers',
-    'Access-Control-Request-Method'
-  ],
-  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(
+  cors({
+    origin: true, // Allow all origins
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "ngrok-skip-browser-warning", // Allow ngrok header
+      "User-Agent",
+      "Cache-Control",
+      "Pragma",
+      "X-Custom-Header",
+      "Access-Control-Request-Headers",
+      "Access-Control-Request-Method",
+    ],
+    exposedHeaders: ["Content-Length", "X-Foo", "X-Bar"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Add request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${req.ip}`);
+  console.log(
+    `${new Date().toISOString()} - ${req.method} ${req.path} - ${req.ip}`
+  );
   console.log(`Request headers:`, JSON.stringify(req.headers, null, 2));
-  
+
   // Log CORS-related headers
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     console.log(`CORS Preflight request from origin: ${req.headers.origin}`);
-    console.log(`Requested headers: ${req.headers['access-control-request-headers']}`);
+    console.log(
+      `Requested headers: ${req.headers["access-control-request-headers"]}`
+    );
   }
-  
+
   next();
 });
 
@@ -144,12 +158,12 @@ app.get("/health", (req, res) => {
 // Railway health check endpoint
 app.get("/", (req, res) => {
   console.log("🏠 Root endpoint requested");
-  res.json({ 
-    status: "ok", 
+  res.json({
+    status: "ok",
     message: "Shopify Database Sync API is running",
     timestamp: new Date().toISOString(),
     port: PORT,
-    environment: process.env.NODE_ENV || "development"
+    environment: process.env.NODE_ENV || "development",
   });
 });
 
@@ -159,14 +173,13 @@ app.get("/ping", (req, res) => {
   res.status(200).send("pong");
 });
 
-
 // Test endpoint
 app.get("/test", (req, res) => {
-  res.json({ 
-    status: "ok", 
+  res.json({
+    status: "ok",
     message: "Test endpoint working",
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development"
+    environment: process.env.NODE_ENV || "development",
   });
 });
 
@@ -192,7 +205,7 @@ app.get("/debug", (req, res) => {
       method: req.method,
       url: req.url,
       originalUrl: req.originalUrl,
-    }
+    },
   });
 });
 
@@ -223,7 +236,10 @@ app.post("/api/settings", (req, res) => {
       cronService.restart();
       logger.log("info", "Settings updated and cron jobs restarted");
     } else {
-      logger.log("warn", "Cron service not available, settings updated but cron jobs not restarted");
+      logger.log(
+        "warn",
+        "Cron service not available, settings updated but cron jobs not restarted"
+      );
     }
 
     res.json(result);
@@ -232,62 +248,6 @@ app.post("/api/settings", (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update settings",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-});
-
-// Reset settings endpoint
-app.post("/api/settings/reset", (req, res) => {
-  try {
-    SystemSettingsService.resetToDefaults();
-    
-    // Restart cron jobs after reset
-    if (cronService) {
-      cronService.restart();
-      logger.log("info", "Settings reset to defaults and cron jobs restarted");
-    } else {
-      logger.log("warn", "Settings reset to defaults but cron service not available");
-    }
-    
-    res.json({
-      success: true,
-      message: "Settings reset to defaults successfully",
-      data: SystemSettingsService.getSettings(),
-    });
-  } catch (error) {
-    logger.log("error", "Failed to reset settings", { error });
-    res.status(500).json({
-      success: false,
-      message: "Failed to reset settings",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-});
-
-// Enable sync and automation endpoint
-app.post("/api/settings/enable-sync", (req, res) => {
-  try {
-    SystemSettingsService.enableSyncAndAutomation();
-    
-    // Restart cron jobs after enabling
-    if (cronService) {
-      cronService.restart();
-      logger.log("info", "Sync and automation enabled and cron jobs restarted");
-    } else {
-      logger.log("warn", "Sync and automation enabled but cron service not available");
-    }
-    
-    res.json({
-      success: true,
-      message: "Sync and automation enabled successfully",
-      data: SystemSettingsService.getSettings(),
-    });
-  } catch (error) {
-    logger.log("error", "Failed to enable sync and automation", { error });
-    res.status(500).json({
-      success: false,
-      message: "Failed to enable sync and automation",
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }
@@ -416,7 +376,7 @@ app.get("/api/cron/status", (req, res) => {
         data: null,
       });
     }
-    
+
     const status = cronService.getStatus();
     res.json({
       success: true,
@@ -441,7 +401,7 @@ app.post("/api/cron/start", (req, res) => {
         message: "Cron service not available",
       });
     }
-    
+
     cronService.start();
     logger.log("info", "Cron jobs started via API");
     res.json({
@@ -466,7 +426,7 @@ app.post("/api/cron/stop", (req, res) => {
         message: "Cron service not available",
       });
     }
-    
+
     cronService.stop();
     logger.log("info", "Cron jobs stopped via API");
     res.json({
@@ -491,7 +451,7 @@ app.post("/api/cron/restart", (req, res) => {
         message: "Cron service not available",
       });
     }
-    
+
     cronService.restart();
     logger.log("info", "Cron jobs restarted via API");
     res.json({
@@ -608,7 +568,11 @@ app.use(
     next: express.NextFunction
   ) => {
     console.error(`Error handling ${req.method} ${req.path}:`, error);
-    logger.log("error", "Unhandled error", { error, path: req.path, method: req.method });
+    logger.log("error", "Unhandled error", {
+      error,
+      path: req.path,
+      method: req.method,
+    });
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -620,24 +584,24 @@ app.use(
 // Graceful shutdown handler
 const gracefulShutdown = (signal: string) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
-  
+
   if (cronService) {
     cronService.stop();
     console.log("Cron jobs stopped");
   }
-  
+
   process.exit(0);
 };
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Validate Railway configuration
 if (process.env.RAILWAY_ENVIRONMENT) {
   console.log("🚂 Railway Environment Detected");
   console.log(`🚂 Railway PORT: ${process.env.PORT}`);
   console.log(`🚂 Railway Public Domain: ${process.env.RAILWAY_PUBLIC_DOMAIN}`);
-  
+
   if (!process.env.PORT) {
     console.error("❌ Railway PORT environment variable is missing!");
     process.exit(1);
@@ -671,7 +635,9 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
   try {
     const testResponse = await fetch(`http://localhost:${PORT}/health`);
     const testData = await testResponse.text();
-    console.log(`✅ Server test successful: ${testResponse.status} - ${testData}`);
+    console.log(
+      `✅ Server test successful: ${testResponse.status} - ${testData}`
+    );
   } catch (error) {
     console.error(`❌ Server test failed:`, error);
   }
@@ -684,26 +650,32 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
 });
 
 // Handle server errors
-server.on('error', (error: any) => {
-  if (error.code === 'EADDRINUSE') {
+server.on("error", (error: any) => {
+  if (error.code === "EADDRINUSE") {
     console.error(`❌ Port ${PORT} is already in use`);
   } else {
-    console.error('❌ Server error:', error);
+    console.error("❌ Server error:", error);
   }
   process.exit(1);
 });
 
 // Keep server alive and log periodic status
 setInterval(() => {
-  console.log(`🔄 Server status check - Port: ${PORT}, Uptime: ${Math.floor(process.uptime())}s`);
+  console.log(
+    `🔄 Server status check - Port: ${PORT}, Uptime: ${Math.floor(
+      process.uptime()
+    )}s`
+  );
 }, 30000); // Every 30 seconds
 
 // Handle connection events
-server.on('connection', (socket) => {
-  console.log(`🔌 New connection from ${socket.remoteAddress}:${socket.remotePort}`);
+server.on("connection", (socket) => {
+  console.log(
+    `🔌 New connection from ${socket.remoteAddress}:${socket.remotePort}`
+  );
 });
 
-server.on('listening', () => {
+server.on("listening", () => {
   console.log(`👂 Server is listening on port ${PORT}`);
 });
 

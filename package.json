@@ -24,6 +24,7 @@
     "test:gmail": "tsx src/scripts/test-gmail-setup.ts",
     "test:email-fix": "tsx src/scripts/test-email-fix.ts",
     "test:simple-email": "tsx src/scripts/simple-email-test.ts",
+    "test:wait-times": "tsx src/scripts/test-wait-times.ts",
     "api:start": "tsx src/api/server.ts",
     "api:dev": "tsx --watch src/api/server.ts",
     "lint": "eslint ."

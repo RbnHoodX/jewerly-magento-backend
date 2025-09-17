@@ -256,14 +256,24 @@ export class AutomationService {
     rule: StatusRule
   ): Promise<boolean> {
     if (rule.wait_time_business_days === 0) {
+      this.logger.log("debug", `Order ready immediately (no wait time)`);
       return true;
     }
 
     const noteDate = new Date(note.created_at!);
+    const currentDate = new Date();
     const businessDaysElapsed = this.calculateBusinessDays(
       noteDate,
-      new Date()
+      currentDate
     );
+
+    this.logger.log("debug", `Wait time check:`, {
+      noteDate: noteDate.toISOString(),
+      currentDate: currentDate.toISOString(),
+      businessDaysElapsed,
+      requiredWaitDays: rule.wait_time_business_days,
+      shouldProcess: businessDaysElapsed >= rule.wait_time_business_days,
+    });
 
     return businessDaysElapsed >= rule.wait_time_business_days;
   }
@@ -275,10 +285,23 @@ export class AutomationService {
     let count = 0;
     const current = new Date(startDate);
 
-    while (current < endDate) {
+    // Set time to start of day for accurate comparison
+    current.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+
+    // If start date is same as end date, return 0
+    if (current.getTime() === end.getTime()) {
+      return 0;
+    }
+
+    // Move to next day to start counting
+    current.setDate(current.getDate() + 1);
+
+    while (current <= end) {
       const dayOfWeek = current.getDay();
-      // Skip weekends (Saturday = 6, Sunday = 0)
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // Count only weekdays (Monday = 1, Friday = 5)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         count++;
       }
       current.setDate(current.getDate() + 1);
