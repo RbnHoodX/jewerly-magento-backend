@@ -24,15 +24,15 @@ process.on('uncaughtException', (error) => {
 
 const app = express();
 const logger = new Logger("SystemSettingsAPI");
-// Railway provides PORT environment variable, use it if available
-const PORT = parseInt(process.env.PORT || process.env.API_PORT || "3000", 10);
+// Railway requires using the PORT environment variable
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Log the port configuration for debugging
-console.log(`🔧 Port configuration:`, {
+console.log(`🔧 Railway Port Configuration:`, {
   'process.env.PORT': process.env.PORT,
-  'process.env.API_PORT': process.env.API_PORT,
   'Final PORT': PORT,
-  'Type': typeof PORT
+  'Type': typeof PORT,
+  'Is Railway': !!process.env.RAILWAY_ENVIRONMENT
 });
 
 // Log startup information
@@ -534,6 +534,18 @@ const gracefulShutdown = (signal: string) => {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Validate Railway configuration
+if (process.env.RAILWAY_ENVIRONMENT) {
+  console.log("🚂 Railway Environment Detected");
+  console.log(`🚂 Railway PORT: ${process.env.PORT}`);
+  console.log(`🚂 Railway Public Domain: ${process.env.RAILWAY_PUBLIC_DOMAIN}`);
+  
+  if (!process.env.PORT) {
+    console.error("❌ Railway PORT environment variable is missing!");
+    process.exit(1);
+  }
+}
 
 // Start server - Railway requires binding to 0.0.0.0
 const server = app.listen(PORT, "0.0.0.0", async () => {
