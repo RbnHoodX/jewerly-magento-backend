@@ -8,10 +8,8 @@ import { GoogleSheetsService } from "./googleSheets";
 import { StatusModelService } from "./statusModelService";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const configDir = path.join(process.cwd(), 'src', 'config');
 
 export interface SystemSettings {
   cronJobInterval: number; // in minutes
@@ -298,7 +296,7 @@ export class SystemSettingsService {
   private static saveSettings(): void {
     try {
       // Create config directory if it doesn't exist
-      const configDir = path.join(__dirname, "../config");
+      // Use the global configDir
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
       }
@@ -318,7 +316,7 @@ export class SystemSettingsService {
   static loadSettings(): void {
     try {
       // Create config directory if it doesn't exist
-      const configDir = path.join(__dirname, "../config");
+      // Use the global configDir
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
       }
