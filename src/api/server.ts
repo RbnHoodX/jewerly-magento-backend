@@ -48,12 +48,19 @@ const initializeCronService = async () => {
 };
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: true, // Allow all origins
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Add request logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${req.ip}`);
+  console.log(`Request headers:`, JSON.stringify(req.headers, null, 2));
   next();
 });
 
@@ -73,7 +80,14 @@ const startCronJobsIfEnabled = () => {
 
 // Health check endpoint
 app.get("/health", (req, res) => {
+  console.log("🏥 Health check requested");
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Simple ping endpoint for basic connectivity test
+app.get("/ping", (req, res) => {
+  console.log("🏓 Ping requested");
+  res.status(200).send("pong");
 });
 
 app.get("/", (req, res) => {
@@ -518,6 +532,16 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
   );
   logger.log("info", `CORS enabled for all origins`);
 
+  // Test server is actually listening
+  console.log("🧪 Testing server response...");
+  try {
+    const testResponse = await fetch(`http://localhost:${PORT}/health`);
+    const testData = await testResponse.text();
+    console.log(`✅ Server test successful: ${testResponse.status} - ${testData}`);
+  } catch (error) {
+    console.error(`❌ Server test failed:`, error);
+  }
+
   // Initialize cron service asynchronously after server starts
   console.log("🔄 Initializing cron service...");
   await initializeCronService();
@@ -533,6 +557,20 @@ server.on('error', (error: any) => {
     console.error('❌ Server error:', error);
   }
   process.exit(1);
+});
+
+// Keep server alive and log periodic status
+setInterval(() => {
+  console.log(`🔄 Server status check - Port: ${PORT}, Uptime: ${Math.floor(process.uptime())}s`);
+}, 30000); // Every 30 seconds
+
+// Handle connection events
+server.on('connection', (socket) => {
+  console.log(`🔌 New connection from ${socket.remoteAddress}:${socket.remotePort}`);
+});
+
+server.on('listening', () => {
+  console.log(`👂 Server is listening on port ${PORT}`);
 });
 
 export default app;
