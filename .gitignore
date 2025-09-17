@@ -26,6 +26,3 @@ dist-ssr
 *.sln
 *.sw?
 
-src/config/system-settings.json
-system-settings.json
-**/system-settings.json
