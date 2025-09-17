@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc --project tsconfig.railway.json && cp -r src/config dist/ 2>/dev/null || true",
+    "build": "tsc && cp -r src/config dist/ 2>/dev/null || true",
     "build:dev": "tsc",
     "build:bun": "bun build src/api/server.ts --outdir dist --target bun --minify",
     "start": "node dist/api/server.js",
