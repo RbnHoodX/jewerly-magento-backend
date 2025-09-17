@@ -1,6 +1,7 @@
 // Database table types based on Supabase schema
 export interface Customer {
   id: string;
+  customer_id?: string; // 6-digit customer number (e.g., 000001, 000020)
   name?: string;
   email: string;
   first_name?: string;
@@ -345,6 +346,7 @@ export interface SyncConfig {
 // Database operation types
 export interface CustomerUpsertData {
   email: string;
+  customer_id?: string; // 6-digit customer number (e.g., 000001, 000020)
   name?: string;
   first_name?: string;
   last_name?: string;
