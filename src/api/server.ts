@@ -24,13 +24,29 @@ process.on('uncaughtException', (error) => {
 
 const app = express();
 const logger = new Logger("SystemSettingsAPI");
-const PORT = parseInt(process.env.PORT || process.env.API_PORT || "3003", 10);
+// Railway provides PORT environment variable, use it if available
+const PORT = parseInt(process.env.PORT || process.env.API_PORT || "3000", 10);
+
+// Log the port configuration for debugging
+console.log(`🔧 Port configuration:`, {
+  'process.env.PORT': process.env.PORT,
+  'process.env.API_PORT': process.env.API_PORT,
+  'Final PORT': PORT,
+  'Type': typeof PORT
+});
 
 // Log startup information
 console.log("🚀 Starting Shopify Database Sync API Server");
 console.log(`📦 Runtime: Bun ${process.version}`);
 console.log(`🌐 Port: ${PORT}`);
 console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
+console.log(`🔍 Environment variables:`, {
+  PORT: process.env.PORT,
+  API_PORT: process.env.API_PORT,
+  NODE_ENV: process.env.NODE_ENV,
+  RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
+  RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN
+});
 
 // Initialize cron service
 let cronService: SystemCronService | null = null;
@@ -84,15 +100,24 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Railway health check endpoint
+app.get("/", (req, res) => {
+  console.log("🏠 Root endpoint requested");
+  res.json({ 
+    status: "ok", 
+    message: "Shopify Database Sync API is running",
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    environment: process.env.NODE_ENV || "development"
+  });
+});
+
 // Simple ping endpoint for basic connectivity test
 app.get("/ping", (req, res) => {
   console.log("🏓 Ping requested");
   res.status(200).send("pong");
 });
 
-app.get("/", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
 
 // Test endpoint
 app.get("/test", (req, res) => {
@@ -510,7 +535,7 @@ const gracefulShutdown = (signal: string) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Start server
+// Start server - Railway requires binding to 0.0.0.0
 const server = app.listen(PORT, "0.0.0.0", async () => {
   console.log("✅ Server started successfully!");
   console.log(`🌐 Server running on port ${PORT}`);
