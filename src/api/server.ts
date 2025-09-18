@@ -679,4 +679,54 @@ server.on("listening", () => {
   console.log(`👂 Server is listening on port ${PORT}`);
 });
 
+// Shopify order endpoints
+app.get("/api/shopify/order/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required",
+      });
+    }
+
+    // Import Shopify service
+    const { ShopifyService } = await import("../services/shopify");
+
+    // Initialize Shopify service
+    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
+    const apiVersion = process.env.SHOPIFY_API_VERSION;
+    const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+
+    if (!storeDomain || !apiVersion || !accessToken) {
+      return res.status(500).json({
+        success: false,
+        message: "Shopify configuration missing",
+      });
+    }
+
+    const shopifyService = new ShopifyService(
+      storeDomain,
+      apiVersion,
+      accessToken
+    );
+
+    // Fetch order from Shopify
+    const order = await shopifyService.fetchOrder(orderId);
+
+    res.json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    console.error("Error fetching Shopify order:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch order from Shopify",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
 export default app;
