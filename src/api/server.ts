@@ -583,7 +583,10 @@ app.get("/api/shopify/order/:orderId", async (req, res) => {
     const apiVersion = process.env.SHOPIFY_API_VERSION;
     const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 
+    console.log(`🔧 Shopify Config - Domain: ${storeDomain}, API Version: ${apiVersion}, Token: ${accessToken ? 'Present' : 'Missing'}`);
+
     if (!storeDomain || !apiVersion || !accessToken) {
+      console.error("❌ Shopify configuration missing");
       return res.status(500).json({
         success: false,
         message: "Shopify configuration missing",
@@ -597,14 +600,18 @@ app.get("/api/shopify/order/:orderId", async (req, res) => {
     );
 
     // Fetch order from Shopify
+    console.log(`🔄 Calling shopifyService.fetchOrder(${orderId})`);
     const order = await shopifyService.fetchOrder(orderId);
+    console.log(`✅ Successfully fetched order: ${orderId}`);
+    console.log(`📊 Order data keys:`, Object.keys(order || {}));
 
     res.json({
       success: true,
       data: order,
     });
   } catch (error) {
-    console.error("Error fetching Shopify order:", error);
+    console.error(`❌ Error fetching Shopify order: ${error}`);
+    console.error(`❌ Error details:`, error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch order from Shopify",
