@@ -583,7 +583,11 @@ app.get("/api/shopify/order/:orderId", async (req, res) => {
     const apiVersion = process.env.SHOPIFY_API_VERSION;
     const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 
-    console.log(`🔧 Shopify Config - Domain: ${storeDomain}, API Version: ${apiVersion}, Token: ${accessToken ? 'Present' : 'Missing'}`);
+    console.log(
+      `🔧 Shopify Config - Domain: ${storeDomain}, API Version: ${apiVersion}, Token: ${
+        accessToken ? "Present" : "Missing"
+      }`
+    );
 
     if (!storeDomain || !apiVersion || !accessToken) {
       console.error("❌ Shopify configuration missing");
