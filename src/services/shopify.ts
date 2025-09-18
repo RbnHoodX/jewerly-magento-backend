@@ -130,4 +130,59 @@ export class ShopifyService {
     }
   }
 
+  async getVariantDetails(lineItem: any): Promise<{metalType?: string, size?: string}> {
+    try {
+      if (lineItem.product_id && lineItem.variant_id) {
+        const product = await this.fetchProduct(lineItem.product_id);
+        
+        if (product.variants) {
+          const variant = product.variants.find((v: any) => v.id === lineItem.variant_id);
+          if (variant) {
+            // Extract metal type from variant title (e.g., "14KT Yellow Gold")
+            const metalType = this.extractMetalTypeFromVariant(variant);
+            
+            return {
+              metalType: metalType || undefined,
+              size: undefined // Size comes from line item properties
+            };
+          }
+        }
+      }
+
+      return {};
+    } catch (error) {
+      console.warn(
+        `Failed to fetch variant details for line item ${lineItem.id}:`,
+        error
+      );
+      return {};
+    }
+  }
+
+  private extractMetalTypeFromVariant(variant: any): string | null {
+    // Look for metal type patterns in variant title
+    const title = variant.title || '';
+    
+    // Common metal type patterns
+    const metalPatterns = [
+      /(\d+KT\s+(?:Yellow|White|Rose|Platinum)\s+Gold)/i,
+      /(\d+KT\s+Gold)/i,
+      /(Yellow\s+Gold)/i,
+      /(White\s+Gold)/i,
+      /(Rose\s+Gold)/i,
+      /(Platinum)/i,
+      /(Sterling\s+Silver)/i,
+      /(Silver)/i
+    ];
+
+    for (const pattern of metalPatterns) {
+      const match = title.match(pattern);
+      if (match) {
+        return match[1];
+      }
+    }
+
+    return null;
+  }
+
 }

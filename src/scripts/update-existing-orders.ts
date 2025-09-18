@@ -33,6 +33,22 @@ if (!storeDomain || !apiVersion || !accessToken) {
 
 const shopifyService = new ShopifyService(storeDomain, apiVersion, accessToken);
 
+// Extract a specific property from the properties array
+function extractProperty(
+  properties: Array<{ name: string; value: string }>,
+  possibleNames: string[]
+): string | null {
+  for (const prop of properties) {
+    const propName = prop.name.toLowerCase().trim();
+    for (const possibleName of possibleNames) {
+      if (propName === possibleName.toLowerCase().trim()) {
+        return prop.value;
+      }
+    }
+  }
+  return null;
+}
+
 // Build order-specific details from line item title and properties
 function buildOrderSpecificDetails(
   title: string,
@@ -163,11 +179,19 @@ async function updateExistingOrders() {
             continue;
           }
 
-          // Fetch product image URL
+          // Fetch product image URL and variant details
           const imageUrl = await shopifyService.getProductImageUrl(lineItem);
+          const variantDetails = await shopifyService.getVariantDetails(lineItem);
 
           // Extract order-specific properties from line item
           const properties = lineItem.properties || [];
+          
+          // Extract specific properties for database columns
+          const ringSize = extractProperty(properties, ["ring size", "size", "ring_size"]);
+          const metalType = variantDetails.metalType || extractProperty(properties, ["metal", "metal type", "metal_type", "metaltype"]);
+          const engraving = extractProperty(properties, ["engraving", "personalization", "text"]);
+          
+          // Build details string with remaining properties
           const orderSpecificDetails = buildOrderSpecificDetails(
             lineItem.title,
             properties
@@ -178,15 +202,21 @@ async function updateExistingOrders() {
             productId: lineItem.product_id,
             variantId: lineItem.variant_id,
             properties: properties.length,
+            allProperties: properties.map(p => `${p.name}: ${p.value}`),
+            ringSize: ringSize || "Not found",
+            metalType: metalType || "Not found",
+            engraving: engraving || "Not found",
             imageUrl: imageUrl || "No image found",
           });
 
-          // Update the order item
+          // Update the order item with specific columns
           const { error: updateError } = await supabase
             .from("order_items")
             .update({
               details: orderSpecificDetails,
               image: imageUrl || null,
+              size: ringSize || null,
+              metal_type: metalType || null,
             })
             .eq("id", matchingItem.id);
 

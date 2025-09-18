@@ -240,11 +240,31 @@ export class SyncService {
 
     const orderItems: OrderItemInsertData[] = await Promise.all(
       order.line_items.map(async (lineItem) => {
-        // Fetch product image URL
+        // Fetch product image URL and variant details
         const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
+        const variantDetails = await this.shopifyService.getVariantDetails(lineItem);
 
         // Extract order-specific properties from line item
         const properties = lineItem.properties || [];
+
+        // Extract specific properties for database columns
+        const ringSize = this.extractProperty(properties, [
+          "ring size",
+          "size",
+          "ring_size",
+        ]);
+        const metalType = variantDetails.metalType || this.extractProperty(properties, [
+          "metal",
+          "metal type",
+          "metal_type",
+          "metaltype",
+        ]);
+        const engraving = this.extractProperty(properties, [
+          "engraving",
+          "personalization",
+          "text",
+        ]);
+
         const orderSpecificDetails = this.buildOrderSpecificDetails(
           lineItem.title,
           properties
@@ -255,6 +275,9 @@ export class SyncService {
           productId: lineItem.product_id,
           variantId: lineItem.variant_id,
           properties: properties.length,
+          ringSize: ringSize || "Not found",
+          metalType: metalType || "Not found",
+          engraving: engraving || "Not found",
           imageUrl: imageUrl || "No image found",
         });
 
@@ -265,6 +288,8 @@ export class SyncService {
           price: parseFloat(lineItem.price),
           qty: lineItem.quantity,
           image: imageUrl || undefined,
+          size: ringSize || undefined,
+          metal_type: metalType || undefined,
         };
       })
     );
@@ -407,6 +432,25 @@ export class SyncService {
 
           // Extract order-specific properties from line item
           const properties = lineItem.properties || [];
+
+          // Extract specific properties for database columns
+          const ringSize = this.extractProperty(properties, [
+            "ring size",
+            "size",
+            "ring_size",
+          ]);
+          const metalType = this.extractProperty(properties, [
+            "metal",
+            "metal type",
+            "metal_type",
+            "metaltype",
+          ]);
+          const engraving = this.extractProperty(properties, [
+            "engraving",
+            "personalization",
+            "text",
+          ]);
+
           const orderSpecificDetails = this.buildOrderSpecificDetails(
             lineItem.title,
             properties
@@ -417,6 +461,9 @@ export class SyncService {
             productId: lineItem.product_id,
             variantId: lineItem.variant_id,
             properties: properties.length,
+            ringSize: ringSize || "Not found",
+            metalType: metalType || "Not found",
+            engraving: engraving || "Not found",
             imageUrl: imageUrl || "No image found",
           });
 
@@ -427,6 +474,8 @@ export class SyncService {
             price: parseFloat(lineItem.price),
             qty: lineItem.quantity,
             image: imageUrl || undefined,
+            size: ringSize || undefined,
+            metal_type: metalType || undefined,
           };
         })
       );
@@ -445,6 +494,24 @@ export class SyncService {
       );
       return "skipped";
     }
+  }
+
+  /**
+   * Extract a specific property from the properties array
+   */
+  private extractProperty(
+    properties: Array<{ name: string; value: string }>,
+    possibleNames: string[]
+  ): string | null {
+    for (const prop of properties) {
+      const propName = prop.name.toLowerCase().trim();
+      for (const possibleName of possibleNames) {
+        if (propName === possibleName.toLowerCase().trim()) {
+          return prop.value;
+        }
+      }
+    }
+    return null;
   }
 
   /**
