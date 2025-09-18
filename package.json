@@ -29,6 +29,10 @@
     "test:customer-ids": "tsx src/scripts/test-customer-id-generation.ts",
     "update:existing-orders": "tsx src/scripts/update-existing-orders.ts",
     "backfill:order-datetimes": "tsx src/scripts/backfill-order-datetimes.ts",
+    "check:discount-columns": "tsx src/scripts/check-discount-columns.ts",
+    "check:shipping-cost-column": "tsx src/scripts/add-shipping-cost-column.ts",
+    "backfill:discounts-shipping": "tsx src/scripts/backfill-discounts-and-shipping.ts",
+    "check:order-ids": "tsx src/scripts/check-order-ids.ts",
     "api:start": "tsx src/api/server.ts",
     "api:dev": "tsx --watch src/api/server.ts",
     "lint": "eslint ."

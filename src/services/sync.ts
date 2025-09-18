@@ -214,11 +214,26 @@ export class SyncService {
         : undefined,
     };
 
+    // Calculate total discount amount
+    const totalDiscount =
+      order.discount_codes?.reduce((sum, discount) => {
+        const amount = parseFloat(discount.amount || "0");
+        return sum + amount;
+      }, 0) || 0;
+
+    // Get shipping cost
+    const shippingCost = parseFloat(order.total_shipping || "0");
+
     // Prepare order data
     const orderData: OrderInsertData = {
       purchase_from: "shopify",
-      order_date: order.created_at ? this.convertToESTDateTime(order.created_at) : undefined,
+      order_date: order.created_at
+        ? this.convertToESTDateTime(order.created_at)
+        : undefined,
       total_amount: parseFloat(order.total_price),
+      discount_amount: totalDiscount,
+      discount_codes: order.discount_codes || [],
+      shipping_cost: shippingCost,
       shopify_order_number: order.name, // Store Shopify order number (e.g., #1001, #1002)
       bill_to_name: order.billing_address
         ? `${order.billing_address.first_name || ""} ${
@@ -242,7 +257,9 @@ export class SyncService {
       order.line_items.map(async (lineItem) => {
         // Fetch product image URL and variant details
         const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
-        const variantDetails = await this.shopifyService.getVariantDetails(lineItem);
+        const variantDetails = await this.shopifyService.getVariantDetails(
+          lineItem
+        );
 
         // Extract order-specific properties from line item
         const properties = lineItem.properties || [];
@@ -253,12 +270,14 @@ export class SyncService {
           "size",
           "ring_size",
         ]);
-        const metalType = variantDetails.metalType || this.extractProperty(properties, [
-          "metal",
-          "metal type",
-          "metal_type",
-          "metaltype",
-        ]);
+        const metalType =
+          variantDetails.metalType ||
+          this.extractProperty(properties, [
+            "metal",
+            "metal type",
+            "metal_type",
+            "metaltype",
+          ]);
         const engraving = this.extractProperty(properties, [
           "engraving",
           "personalization",
@@ -502,8 +521,10 @@ export class SyncService {
   private convertToESTDateTime(utcDateString: string): string {
     const date = new Date(utcDateString);
     // Convert to EST and format as YYYY-MM-DD HH:MM:SS
-    const estDate = new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
-    return estDate.toISOString().replace('T', ' ').split('.')[0];
+    const estDate = new Date(
+      date.toLocaleString("en-US", { timeZone: "America/New_York" })
+    );
+    return estDate.toISOString().replace("T", " ").split(".")[0];
   }
 
   /**

@@ -12,8 +12,10 @@ export class DataMapper {
   private static convertToESTDateTime(utcDateString: string): string {
     const date = new Date(utcDateString);
     // Convert to EST and format as YYYY-MM-DD HH:MM:SS
-    const estDate = new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
-    return estDate.toISOString().replace('T', ' ').split('.')[0];
+    const estDate = new Date(
+      date.toLocaleString("en-US", { timeZone: "America/New_York" })
+    );
+    return estDate.toISOString().replace("T", " ").split(".")[0];
   }
 
   static mapShopifyToCustomerData(order: ShopifyOrder): CustomerUpsertData {
@@ -41,12 +43,25 @@ export class DataMapper {
     // Extract shipping service and cost from fulfillments
     const shippingInfo = this.extractShippingInfo(order);
 
+    // Calculate total discount amount
+    const totalDiscount =
+      order.discount_codes?.reduce((sum, discount) => {
+        const amount = parseFloat(discount.amount || "0");
+        return sum + amount;
+      }, 0) || 0;
+
+    // Get shipping cost
+    const shippingCost = Number(order.total_shipping || 0);
+
     return {
       purchase_from: "primestyle",
       order_date: order.created_at
         ? DataMapper.convertToESTDateTime(String(order.created_at))
         : undefined,
       total_amount: Number(order.current_total_price ?? 0),
+      discount_amount: totalDiscount,
+      discount_codes: order.discount_codes || [],
+      shipping_cost: shippingCost,
       bill_to_name: this.extractName(
         order.billing_address,
         order.customer,

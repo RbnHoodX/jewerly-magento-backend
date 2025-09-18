@@ -31,6 +31,13 @@ export interface Order {
   purchase_from?: string;
   order_date?: string;
   total_amount: number;
+  discount_amount?: number;
+  discount_codes?: Array<{
+    code: string;
+    amount: string;
+    type: string;
+  }>;
+  shipping_cost?: number;
   bill_to_name?: string;
   ship_to_name?: string;
   created_at: string;
@@ -360,6 +367,13 @@ export interface OrderInsertData {
   purchase_from: string;
   order_date?: string;
   total_amount: number;
+  discount_amount?: number;
+  discount_codes?: Array<{
+    code: string;
+    amount: string;
+    type: string;
+  }>;
+  shipping_cost?: number;
   bill_to_name?: string;
   ship_to_name?: string;
   delivery_method?: string;
