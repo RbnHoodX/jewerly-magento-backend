@@ -243,16 +243,25 @@ export class SyncService {
         // Fetch product image URL
         const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
 
+        // Extract order-specific properties from line item
+        const properties = lineItem.properties || [];
+        const orderSpecificDetails = this.buildOrderSpecificDetails(
+          lineItem.title,
+          properties
+        );
+
         this.logger.log("debug", `Line item: ${lineItem.title}`, {
           sku: lineItem.sku,
           productId: lineItem.product_id,
+          variantId: lineItem.variant_id,
+          properties: properties.length,
           imageUrl: imageUrl || "No image found",
         });
 
         return {
           order_id: "", // Will be set after order creation
           sku: lineItem.sku,
-          details: lineItem.title,
+          details: orderSpecificDetails,
           price: parseFloat(lineItem.price),
           qty: lineItem.quantity,
           image: imageUrl || undefined,
@@ -396,16 +405,25 @@ export class SyncService {
             lineItem
           );
 
+          // Extract order-specific properties from line item
+          const properties = lineItem.properties || [];
+          const orderSpecificDetails = this.buildOrderSpecificDetails(
+            lineItem.title,
+            properties
+          );
+
           this.logger.log("debug", `Line item: ${lineItem.title}`, {
             sku: lineItem.sku,
             productId: lineItem.product_id,
+            variantId: lineItem.variant_id,
+            properties: properties.length,
             imageUrl: imageUrl || "No image found",
           });
 
           return {
             order_id: existingOrderId, // Add required order_id field
             sku: lineItem.sku,
-            details: lineItem.title,
+            details: orderSpecificDetails,
             price: parseFloat(lineItem.price),
             qty: lineItem.quantity,
             image: imageUrl || undefined,
@@ -427,6 +445,30 @@ export class SyncService {
       );
       return "skipped";
     }
+  }
+
+  /**
+   * Build order-specific details from line item title and properties
+   */
+  private buildOrderSpecificDetails(
+    title: string,
+    properties: Array<{ name: string; value: string }>
+  ): string {
+    // Start with the base title
+    let details = title;
+
+    // Add order-specific properties
+    if (properties && properties.length > 0) {
+      const propertyDetails = properties
+        .map((prop) => `${prop.name}: ${prop.value}`)
+        .join(", ");
+
+      if (propertyDetails) {
+        details += ` (${propertyDetails})`;
+      }
+    }
+
+    return details;
   }
 
   /**

@@ -98,11 +98,21 @@ export class ShopifyService {
 
   async getProductImageUrl(lineItem: any): Promise<string | null> {
     try {
-      // If line item has a product_id, fetch the product to get images
+      // First try to get variant-specific image if variant_id exists
+      if (lineItem.variant_id) {
+        const variant = await this.fetchVariant(lineItem.variant_id);
+        if (variant && variant.image_id) {
+          // Get the specific image for this variant
+          const image = await this.fetchImage(variant.image_id);
+          if (image) {
+            return image.src;
+          }
+        }
+      }
+
+      // Fallback to product images if no variant-specific image
       if (lineItem.product_id) {
         const product = await this.fetchProduct(lineItem.product_id);
-
-        // If there are images, return the first one
         if (product.images && product.images.length > 0) {
           return product.images[0].src;
         }
@@ -111,10 +121,46 @@ export class ShopifyService {
       return null;
     } catch (error) {
       console.warn(
-        `Failed to fetch image for product ${lineItem.product_id}:`,
+        `Failed to fetch image for line item ${lineItem.id}:`,
         error
       );
       return null;
     }
+  }
+
+  private async fetchVariant(variantId: number): Promise<any> {
+    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/variants/${variantId}.json`;
+    const res = await fetch(url, {
+      headers: {
+        "X-Shopify-Access-Token": this.accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to fetch variant: ${res.status} ${res.statusText}`
+      );
+    }
+
+    const json = await res.json();
+    return json.variant;
+  }
+
+  private async fetchImage(imageId: number): Promise<any> {
+    const url = `https://${this.storeDomain}/admin/api/${this.apiVersion}/images/${imageId}.json`;
+    const res = await fetch(url, {
+      headers: {
+        "X-Shopify-Access-Token": this.accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
+    }
+
+    const json = await res.json();
+    return json.image;
   }
 }
