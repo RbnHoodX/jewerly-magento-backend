@@ -63,12 +63,46 @@ const initializeCronService = async () => {
   }
 };
 
-// Middleware
+// Manual CORS handler for maximum compatibility
+app.use((req, res, next) => {
+  // Set CORS headers
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning, User-Agent, Cache-Control, Pragma, X-Custom-Header, Access-Control-Request-Headers, Access-Control-Request-Method');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, X-Foo, X-Bar');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  
+  next();
+});
+
+// Also use the cors middleware as backup
 app.use(cors({
   origin: true, // Allow all origins
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'Accept', 
+    'Origin',
+    'ngrok-skip-browser-warning', // Allow ngrok header
+    'User-Agent',
+    'Cache-Control',
+    'Pragma',
+    'X-Custom-Header',
+    'Access-Control-Request-Headers',
+    'Access-Control-Request-Method'
+  ],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -77,6 +111,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${req.ip}`);
   console.log(`Request headers:`, JSON.stringify(req.headers, null, 2));
+  
+  // Log CORS-related headers
+  if (req.method === 'OPTIONS') {
+    console.log(`CORS Preflight request from origin: ${req.headers.origin}`);
+    console.log(`Requested headers: ${req.headers['access-control-request-headers']}`);
+  }
+  
   next();
 });
 
