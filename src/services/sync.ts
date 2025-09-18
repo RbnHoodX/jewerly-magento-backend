@@ -217,7 +217,7 @@ export class SyncService {
     // Prepare order data
     const orderData: OrderInsertData = {
       purchase_from: "shopify",
-      order_date: order.created_at,
+      order_date: order.created_at ? this.convertToESTDateTime(order.created_at) : undefined,
       total_amount: parseFloat(order.total_price),
       shopify_order_number: order.name, // Store Shopify order number (e.g., #1001, #1002)
       bill_to_name: order.billing_address
@@ -494,6 +494,16 @@ export class SyncService {
       );
       return "skipped";
     }
+  }
+
+  /**
+   * Convert UTC date to EST datetime string (YYYY-MM-DD HH:MM:SS)
+   */
+  private convertToESTDateTime(utcDateString: string): string {
+    const date = new Date(utcDateString);
+    // Convert to EST and format as YYYY-MM-DD HH:MM:SS
+    const estDate = new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    return estDate.toISOString().replace('T', ' ').split('.')[0];
   }
 
   /**

@@ -28,6 +28,7 @@
     "backfill:customer-ids": "tsx src/scripts/backfill-customer-ids.ts",
     "test:customer-ids": "tsx src/scripts/test-customer-id-generation.ts",
     "update:existing-orders": "tsx src/scripts/update-existing-orders.ts",
+    "backfill:order-datetimes": "tsx src/scripts/backfill-order-datetimes.ts",
     "api:start": "tsx src/api/server.ts",
     "api:dev": "tsx --watch src/api/server.ts",
     "lint": "eslint ."

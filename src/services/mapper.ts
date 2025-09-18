@@ -8,6 +8,14 @@ import {
 } from "../types";
 
 export class DataMapper {
+  // Convert UTC date to EST datetime string (YYYY-MM-DD HH:MM:SS)
+  private static convertToESTDateTime(utcDateString: string): string {
+    const date = new Date(utcDateString);
+    // Convert to EST and format as YYYY-MM-DD HH:MM:SS
+    const estDate = new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    return estDate.toISOString().replace('T', ' ').split('.')[0];
+  }
+
   static mapShopifyToCustomerData(order: ShopifyOrder): CustomerUpsertData {
     const email = order?.email || order?.customer?.email;
     const customer = order?.customer;
@@ -36,7 +44,7 @@ export class DataMapper {
     return {
       purchase_from: "primestyle",
       order_date: order.created_at
-        ? String(order.created_at).slice(0, 10)
+        ? DataMapper.convertToESTDateTime(String(order.created_at))
         : undefined,
       total_amount: Number(order.current_total_price ?? 0),
       bill_to_name: this.extractName(
