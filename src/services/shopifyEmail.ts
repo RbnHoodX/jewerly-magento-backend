@@ -155,7 +155,7 @@ export class ShopifyEmailService {
       from: this.fromEmail,
     });
 
-    // Create transporter with explicit Gmail SMTP settings
+    // Create transporter with explicit Gmail SMTP settings and timeout configuration
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -164,6 +164,13 @@ export class ShopifyEmailService {
         user: this.gmailUser,
         pass: this.gmailPassword,
       },
+      connectionTimeout: 60000, // 60 seconds
+      greetingTimeout: 30000,   // 30 seconds
+      socketTimeout: 60000,     // 60 seconds
+      pool: true,               // Use connection pooling
+      maxConnections: 5,        // Maximum number of connections
+      maxMessages: 100,         // Maximum messages per connection
+      rateLimit: 14,            // Maximum 14 emails per second
     });
 
     // Verify connection configuration
@@ -192,32 +199,61 @@ export class ShopifyEmailService {
       replyTo: emailData.replyTo || this.fromEmail,
     };
 
-    try {
-      const info = await transporter.sendMail(mailOptions);
-      const emailId = info.messageId || `gmail_${Date.now()}`;
+    // Retry logic for email sending
+    const maxRetries = 3;
+    let lastError: Error | undefined;
 
-      this.logger.log("info", "Email sent successfully via Gmail SMTP", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-        messageId: info.messageId,
-      });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.log("info", `Gmail SMTP attempt ${attempt}/${maxRetries}`, {
+          to: emailData.to,
+          subject: emailData.subject,
+        });
 
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via Gmail SMTP:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-      throw new Error(
-        `Gmail SMTP send failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
+        const info = await transporter.sendMail(mailOptions);
+        const emailId = info.messageId || `gmail_${Date.now()}`;
+
+        this.logger.log("info", "Email sent successfully via Gmail SMTP", {
+          emailId,
+          to: emailData.to,
+          subject: emailData.subject,
+          messageId: info.messageId,
+          attempt,
+        });
+
+        return emailId;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        this.logger.log("warn", `Gmail SMTP attempt ${attempt}/${maxRetries} failed:`, {
+          error: lastError.message,
+          to: emailData.to,
+          subject: emailData.subject,
+          attempt,
+        });
+
+        // If this is not the last attempt, wait before retrying
+        if (attempt < maxRetries) {
+          const waitTime = attempt * 2000; // 2s, 4s, 6s
+          this.logger.log("info", `Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
     }
+
+    // All retries failed
+    this.logger.log("error", "All Gmail SMTP attempts failed:", {
+      error: lastError?.message,
+      to: emailData.to,
+      subject: emailData.subject,
+      attempts: maxRetries,
+    });
+    
+    throw new Error(
+      `Gmail SMTP send failed after ${maxRetries} attempts: ${
+        lastError?.message || 'Unknown error'
+      }`
+    );
   }
 
   /**

@@ -237,6 +237,62 @@ app.post("/api/settings", (req, res) => {
   }
 });
 
+// Reset settings endpoint
+app.post("/api/settings/reset", (req, res) => {
+  try {
+    SystemSettingsService.resetToDefaults();
+    
+    // Restart cron jobs after reset
+    if (cronService) {
+      cronService.restart();
+      logger.log("info", "Settings reset to defaults and cron jobs restarted");
+    } else {
+      logger.log("warn", "Settings reset to defaults but cron service not available");
+    }
+    
+    res.json({
+      success: true,
+      message: "Settings reset to defaults successfully",
+      data: SystemSettingsService.getSettings(),
+    });
+  } catch (error) {
+    logger.log("error", "Failed to reset settings", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset settings",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Enable sync and automation endpoint
+app.post("/api/settings/enable-sync", (req, res) => {
+  try {
+    SystemSettingsService.enableSyncAndAutomation();
+    
+    // Restart cron jobs after enabling
+    if (cronService) {
+      cronService.restart();
+      logger.log("info", "Sync and automation enabled and cron jobs restarted");
+    } else {
+      logger.log("warn", "Sync and automation enabled but cron service not available");
+    }
+    
+    res.json({
+      success: true,
+      message: "Sync and automation enabled successfully",
+      data: SystemSettingsService.getSettings(),
+    });
+  } catch (error) {
+    logger.log("error", "Failed to enable sync and automation", { error });
+    res.status(500).json({
+      success: false,
+      message: "Failed to enable sync and automation",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
 // Sync endpoints
 app.post("/api/sync/run-once", async (req, res) => {
   try {
