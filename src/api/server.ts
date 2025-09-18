@@ -679,10 +679,25 @@ server.on("listening", () => {
   console.log(`👂 Server is listening on port ${PORT}`);
 });
 
+// Test Shopify endpoint
+app.get("/api/shopify/test", (req, res) => {
+  console.log("🧪 Shopify test endpoint hit");
+  res.json({
+    success: true,
+    message: "Shopify API is working",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Shopify order endpoints
 app.get("/api/shopify/order/:orderId", async (req, res) => {
+  console.log(
+    `🛍️ Shopify order endpoint hit: /api/shopify/order/${req.params.orderId}`
+  );
   try {
     const { orderId } = req.params;
+
+    console.log(`📦 Fetching Shopify order: ${orderId}`);
 
     if (!orderId) {
       return res.status(400).json({
