@@ -548,6 +548,71 @@ app.get("/api/email/logs", async (req, res) => {
   }
 });
 
+// Test Shopify endpoint
+app.get("/api/shopify/test", (req, res) => {
+  console.log("🧪 Shopify test endpoint hit");
+  res.json({
+    success: true,
+    message: "Shopify API is working",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Shopify order endpoints
+app.get("/api/shopify/order/:orderId", async (req, res) => {
+  console.log(
+    `🛍️ Shopify order endpoint hit: /api/shopify/order/${req.params.orderId}`
+  );
+  try {
+    const { orderId } = req.params;
+
+    console.log(`📦 Fetching Shopify order: ${orderId}`);
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required",
+      });
+    }
+
+    // Import Shopify service
+    const { ShopifyService } = await import("../services/shopify");
+
+    // Initialize Shopify service
+    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
+    const apiVersion = process.env.SHOPIFY_API_VERSION;
+    const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+
+    if (!storeDomain || !apiVersion || !accessToken) {
+      return res.status(500).json({
+        success: false,
+        message: "Shopify configuration missing",
+      });
+    }
+
+    const shopifyService = new ShopifyService(
+      storeDomain,
+      apiVersion,
+      accessToken
+    );
+
+    // Fetch order from Shopify
+    const order = await shopifyService.fetchOrder(orderId);
+
+    res.json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    console.error("Error fetching Shopify order:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch order from Shopify",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
 // Catch-all route for unhandled requests
 app.use("*", (req, res) => {
   console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
@@ -677,71 +742,6 @@ server.on("connection", (socket) => {
 
 server.on("listening", () => {
   console.log(`👂 Server is listening on port ${PORT}`);
-});
-
-// Test Shopify endpoint
-app.get("/api/shopify/test", (req, res) => {
-  console.log("🧪 Shopify test endpoint hit");
-  res.json({
-    success: true,
-    message: "Shopify API is working",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Shopify order endpoints
-app.get("/api/shopify/order/:orderId", async (req, res) => {
-  console.log(
-    `🛍️ Shopify order endpoint hit: /api/shopify/order/${req.params.orderId}`
-  );
-  try {
-    const { orderId } = req.params;
-
-    console.log(`📦 Fetching Shopify order: ${orderId}`);
-
-    if (!orderId) {
-      return res.status(400).json({
-        success: false,
-        message: "Order ID is required",
-      });
-    }
-
-    // Import Shopify service
-    const { ShopifyService } = await import("../services/shopify");
-
-    // Initialize Shopify service
-    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
-    const apiVersion = process.env.SHOPIFY_API_VERSION;
-    const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
-
-    if (!storeDomain || !apiVersion || !accessToken) {
-      return res.status(500).json({
-        success: false,
-        message: "Shopify configuration missing",
-      });
-    }
-
-    const shopifyService = new ShopifyService(
-      storeDomain,
-      apiVersion,
-      accessToken
-    );
-
-    // Fetch order from Shopify
-    const order = await shopifyService.fetchOrder(orderId);
-
-    res.json({
-      success: true,
-      data: order,
-    });
-  } catch (error) {
-    console.error("Error fetching Shopify order:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch order from Shopify",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
 });
 
 export default app;
