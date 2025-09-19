@@ -36,16 +36,40 @@ export class EmailLoggingService {
 
   async logEmail(emailLog: Omit<EmailLog, "id" | "created_at">): Promise<void> {
     try {
+      // Validate order_id is a valid UUID if provided
+      const logData = { ...emailLog };
+      if (logData.order_id && !this.isValidUUID(logData.order_id)) {
+        this.logger.log("warn", "Invalid order_id format, setting to null", {
+          order_id: logData.order_id,
+        });
+        logData.order_id = null;
+      }
+
+      // Ensure required fields are provided
+      if (!logData.message) {
+        logData.message = logData.subject || "No message content";
+      }
+
+      // Ensure email_type is valid
+      if (
+        !logData.email_type ||
+        !["customer", "private", "private_copy", "additional", "test"].includes(
+          logData.email_type
+        )
+      ) {
+        logData.email_type = "customer";
+      }
+
       const { data, error } = await this.supabase
         .from("email_logs")
-        .insert([emailLog])
+        .insert([logData])
         .select()
         .single();
 
       if (error) {
         this.logger.log("error", "Failed to log email", {
           error: error.message,
-          emailLog,
+          emailLog: logData,
         });
         throw error;
       }
@@ -62,6 +86,12 @@ export class EmailLoggingService {
       });
       // Don't throw here - email logging shouldn't break email sending
     }
+  }
+
+  private isValidUUID(uuid: string): boolean {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
   }
 
   async getEmailLogs(limit: number = 50): Promise<EmailLog[]> {
