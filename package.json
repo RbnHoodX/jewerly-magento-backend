@@ -35,7 +35,8 @@
     "check:order-ids": "tsx src/scripts/check-order-ids.ts",
     "api:start": "tsx src/api/server.ts",
     "api:dev": "tsx --watch src/api/server.ts",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "import-diamonds": "tsx scripts/import-diamonds-inventory.ts"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",
