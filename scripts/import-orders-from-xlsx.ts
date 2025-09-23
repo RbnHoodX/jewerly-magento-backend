@@ -446,45 +446,66 @@ class OrderImporter {
     const jsonData = XLSX.utils.sheet_to_json<CustomerNoteData>(worksheet);
     logger.info(`Found ${jsonData.length} customer notes to import`);
 
-    for (const noteData of jsonData) {
-      try {
-        await this.processCustomerNote(noteData);
-      } catch (error) {
-        logger.error(
-          `❌ Failed to import customer note for order ${noteData["Order Number"]}:`,
-          error
-        );
-      }
-    }
+    // Batch process customer notes
+    await this.batchProcessCustomerNotes(jsonData);
   }
 
-  private async processCustomerNote(noteData: CustomerNoteData) {
-    // Find the order by shopify_order_number
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("id, customer_id")
-      .eq("shopify_order_number", noteData["Order Number"].toString())
-      .single();
+  private async batchProcessCustomerNotes(notesData: CustomerNoteData[]) {
+    logger.info(`🚀 Batch processing ${notesData.length} customer notes...`);
 
-    if (orderError || !order) {
-      logger.warn(
-        `Order ${noteData["Order Number"]} not found for customer note`
-      );
+    // Get all unique order numbers
+    const orderNumbers = [
+      ...new Set(notesData.map((note) => note["Order Number"].toString())),
+    ];
+
+    // Batch fetch all orders
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, shopify_order_number")
+      .in("shopify_order_number", orderNumbers);
+
+    if (ordersError) {
+      logger.error("Error fetching orders for customer notes:", ordersError);
       return;
     }
 
-    const customerNote = {
-      order_id: order.id,
-      content: noteData["Order Status"],
-      created_at: this.parseDate(noteData["Date Added"]),
-    };
+    // Create order lookup map
+    const orderMap = new Map(
+      orders?.map((order) => [order.shopify_order_number, order.id]) || []
+    );
 
-    const { error } = await supabase
-      .from("order_customer_notes")
-      .insert(customerNote);
+    // Prepare batch data
+    const batchData = notesData
+      .map((noteData) => {
+        const orderId = orderMap.get(noteData["Order Number"].toString());
+        if (!orderId) {
+          logger.warn(
+            `Order ${noteData["Order Number"]} not found for customer note`
+          );
+          return null;
+        }
 
-    if (error) {
-      logger.error("Error creating customer note:", error);
+        return {
+          order_id: orderId,
+          content: noteData["Order Status"],
+          created_at: this.parseDate(noteData["Date Added"]),
+        };
+      })
+      .filter(Boolean);
+
+    // Batch insert
+    if (batchData.length > 0) {
+      const { error } = await supabase
+        .from("order_customer_notes")
+        .insert(batchData);
+
+      if (error) {
+        logger.error("Error batch inserting customer notes:", error);
+      } else {
+        logger.info(
+          `✅ Successfully batch inserted ${batchData.length} customer notes`
+        );
+      }
     }
   }
 
@@ -500,61 +521,90 @@ class OrderImporter {
     const jsonData = XLSX.utils.sheet_to_json<DiamondData>(worksheet);
     logger.info(`Found ${jsonData.length} diamond records to import`);
 
-    for (const diamondData of jsonData) {
-      try {
-        await this.processDiamondDeduction(diamondData);
-      } catch (error) {
-        logger.error(
-          `❌ Failed to import diamond record for order ${diamondData["Order #"]}:`,
-          { error, diamondData }
-        );
-      }
-    }
+    // Batch process diamond deductions
+    await this.batchProcessDiamondDeductions(jsonData);
   }
 
-  private async processDiamondDeduction(diamondData: DiamondData) {
-    // Find the order by shopify_order_number
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("id")
-      .eq("shopify_order_number", diamondData["Order #"].toString())
-      .single();
+  private async batchProcessDiamondDeductions(diamondsData: DiamondData[]) {
+    logger.info(
+      `🚀 Batch processing ${diamondsData.length} diamond deductions...`
+    );
 
-    if (orderError || !order) {
-      logger.warn(
-        `Order ${diamondData["Order #"]} not found for diamond deduction`
+    // Get all unique order numbers
+    const orderNumbers = [
+      ...new Set(diamondsData.map((diamond) => diamond["Order #"].toString())),
+    ];
+
+    // Batch fetch all orders
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, shopify_order_number")
+      .in("shopify_order_number", orderNumbers);
+
+    if (ordersError) {
+      logger.error(
+        "Error fetching orders for diamond deductions:",
+        ordersError
       );
       return;
     }
 
-    const deductionData = {
-      order_id: order.id,
-      type: diamondData["Type"].toLowerCase() as "center" | "side" | "manual",
-      deduction_type: diamondData["Type"].toLowerCase() as
-        | "center"
-        | "side"
-        | "manual",
-      product_sku: diamondData["Product"] || "Unknown Product",
-      parcel_id: diamondData["Parcel ID"]
-        ? diamondData["Parcel ID"].toString()
-        : "Unknown Parcel",
-      ct_weight: Math.abs(parseFloat(diamondData["CT Weight"])), // Convert negative to positive
-      stones: diamondData["Stones"].toString(),
-      price_per_ct: parseFloat(diamondData["Price Per CT"]),
-      total_price: parseFloat(diamondData["Total Price"]),
-      mm: null, // MM column doesn't exist in the data
-      comments: `Imported from Excel - Product: ${
-        diamondData["Product"] || "Unknown"
-      }`,
-      date_added: this.parseDate(diamondData["Date Added"]),
-    };
+    // Create order lookup map
+    const orderMap = new Map(
+      orders?.map((order) => [order.shopify_order_number, order.id]) || []
+    );
 
-    const { error } = await supabase
-      .from("diamond_deductions")
-      .insert(deductionData);
+    // Prepare batch data
+    const batchData = diamondsData
+      .map((diamondData) => {
+        const orderId = orderMap.get(diamondData["Order #"].toString());
+        if (!orderId) {
+          logger.warn(
+            `Order ${diamondData["Order #"]} not found for diamond deduction`
+          );
+          return null;
+        }
 
-    if (error) {
-      logger.error("Error creating diamond deduction:", error);
+        return {
+          order_id: orderId,
+          type: diamondData["Type"].toLowerCase() as
+            | "center"
+            | "side"
+            | "manual",
+          deduction_type: diamondData["Type"].toLowerCase() as
+            | "center"
+            | "side"
+            | "manual",
+          product_sku: diamondData["Product"] || "Unknown Product",
+          parcel_id: diamondData["Parcel ID"]
+            ? diamondData["Parcel ID"].toString()
+            : "Unknown Parcel",
+          ct_weight: Math.abs(parseFloat(diamondData["CT Weight"])), // Convert negative to positive
+          stones: diamondData["Stones"].toString(),
+          price_per_ct: parseFloat(diamondData["Price Per CT"]),
+          total_price: parseFloat(diamondData["Total Price"]),
+          mm: null, // MM column doesn't exist in the data
+          comments: `Imported from Excel - Product: ${
+            diamondData["Product"] || "Unknown"
+          }`,
+          date_added: this.parseDate(diamondData["Date Added"]),
+        };
+      })
+      .filter(Boolean);
+
+    // Batch insert
+    if (batchData.length > 0) {
+      const { error } = await supabase
+        .from("diamond_deductions")
+        .insert(batchData);
+
+      if (error) {
+        logger.error("Error batch inserting diamond deductions:", error);
+      } else {
+        logger.info(
+          `✅ Successfully batch inserted ${batchData.length} diamond deductions`
+        );
+      }
     }
   }
 
@@ -570,47 +620,64 @@ class OrderImporter {
     const jsonData = XLSX.utils.sheet_to_json<CastingData>(worksheet);
     logger.info(`Found ${jsonData.length} casting records to import`);
 
-    for (const castingData of jsonData) {
-      try {
-        await this.processCastingOrder(castingData);
-      } catch (error) {
-        logger.error(
-          `❌ Failed to import casting record for order ${castingData["Order #"]}:`,
-          error
-        );
-      }
-    }
+    // Batch process casting orders
+    await this.batchProcessCastingOrders(jsonData);
   }
 
-  private async processCastingOrder(castingData: CastingData) {
-    // Find the order by shopify_order_number
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("id")
-      .eq("shopify_order_number", castingData["Order #"].toString())
-      .single();
+  private async batchProcessCastingOrders(castingData: CastingData[]) {
+    logger.info(`🚀 Batch processing ${castingData.length} casting orders...`);
 
-    if (orderError || !order) {
-      logger.warn(
-        `Order ${castingData["Order #"]} not found for casting order`
-      );
+    // Get all unique order numbers
+    const orderNumbers = [
+      ...new Set(castingData.map((casting) => casting["Order #"].toString())),
+    ];
+
+    // Batch fetch all orders
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, shopify_order_number")
+      .in("shopify_order_number", orderNumbers);
+
+    if (ordersError) {
+      logger.error("Error fetching orders for casting orders:", ordersError);
       return;
     }
 
-    // Match the actual casting_orders table structure
-    const castingOrderData = {
-      order_id: castingData["Order #"].toString(),
-      order_number: castingData["Order #"].toString(),
-      status: "completed", // Default status
-    };
+    // Create order lookup map
+    const orderMap = new Map(
+      orders?.map((order) => [order.shopify_order_number, order.id]) || []
+    );
 
-    // Assuming you have a casting_orders table
-    const { error } = await supabase
-      .from("casting_orders")
-      .insert(castingOrderData);
+    // Prepare batch data
+    const batchData = castingData
+      .map((castingData) => {
+        const orderId = orderMap.get(castingData["Order #"].toString());
+        if (!orderId) {
+          logger.warn(
+            `Order ${castingData["Order #"]} not found for casting order`
+          );
+          return null;
+        }
 
-    if (error) {
-      logger.error("Error creating casting order:", error);
+        return {
+          order_id: orderId,
+          order_number: castingData["Order #"].toString(),
+          status: "completed", // Default status
+        };
+      })
+      .filter(Boolean);
+
+    // Batch insert
+    if (batchData.length > 0) {
+      const { error } = await supabase.from("casting_orders").insert(batchData);
+
+      if (error) {
+        logger.error("Error batch inserting casting orders:", error);
+      } else {
+        logger.info(
+          `✅ Successfully batch inserted ${batchData.length} casting orders`
+        );
+      }
     }
   }
 
@@ -632,13 +699,87 @@ class OrderImporter {
       `Found ${Object.keys(hyperlinks).length} hyperlinks in 3D sheet`
     );
 
-    for (const threeDData of jsonData) {
-      try {
-        await this.processThreeDRecord(threeDData, hyperlinks, worksheet);
-      } catch (error) {
-        logger.error(
-          `❌ Failed to import 3D record for order ${threeDData["Order #"]}:`,
-          error
+    // Batch process 3D records
+    await this.batchProcessThreeDRecords(jsonData, hyperlinks, worksheet);
+  }
+
+  private async batchProcessThreeDRecords(
+    threeDData: ThreeDData[],
+    hyperlinks: Record<string, string>,
+    worksheet: XLSX.WorkSheet
+  ) {
+    logger.info(`🚀 Batch processing ${threeDData.length} 3D records...`);
+
+    // Get all unique order numbers
+    const orderNumbers = [
+      ...new Set(threeDData.map((record) => record["Order #"].toString())),
+    ];
+
+    // Batch fetch all orders
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, shopify_order_number")
+      .in("shopify_order_number", orderNumbers);
+
+    if (ordersError) {
+      logger.error("Error fetching orders for 3D records:", ordersError);
+      return;
+    }
+
+    // Create order lookup map
+    const orderMap = new Map(
+      orders?.map((order) => [order.shopify_order_number, order.id]) || []
+    );
+
+    // Prepare batch data with hyperlink extraction
+    const batchData = threeDData
+      .map((threeDData) => {
+        const orderId = orderMap.get(threeDData["Order #"].toString());
+        if (!orderId) {
+          logger.warn(`Order ${threeDData["Order #"]} not found for 3D record`);
+          return null;
+        }
+
+        // Extract hyperlink URL
+        let imageUrl = threeDData["Attachment 1"];
+        if (hyperlinks && imageUrl === "view attachment") {
+          const jsonData = XLSX.utils.sheet_to_json<ThreeDData>(worksheet);
+          const recordIndex = jsonData.findIndex(
+            (record) => record["Order #"] === threeDData["Order #"]
+          );
+
+          if (recordIndex !== -1) {
+            const cellAddress = XLSX.utils.encode_cell({
+              r: recordIndex + 1,
+              c: 2,
+            });
+            const hyperlinkUrl = hyperlinks[cellAddress];
+            if (hyperlinkUrl) {
+              imageUrl = hyperlinkUrl;
+            }
+          }
+        }
+
+        return {
+          order_id: orderId,
+          date_added: this.parseDate(threeDData["Date"]),
+          image_url: imageUrl,
+          image_name: "3d_attachment",
+        };
+      })
+      .filter(Boolean);
+
+    // Batch insert
+    if (batchData.length > 0) {
+      const { error } = await supabase
+        .from("order_3d_related")
+        .insert(batchData);
+
+      if (error) {
+        logger.error("Error batch inserting 3D records:", error);
+      } else {
+        logger.info(
+          `✅ Successfully batch inserted ${batchData.length} 3D records`
         );
       }
     }
@@ -674,78 +815,6 @@ class OrderImporter {
     return hyperlinks;
   }
 
-  private async processThreeDRecord(
-    threeDData: ThreeDData,
-    hyperlinks?: Record<string, string>,
-    worksheet?: XLSX.WorkSheet
-  ) {
-    // Find the order by shopify_order_number
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("id")
-      .eq("shopify_order_number", threeDData["Order #"].toString())
-      .single();
-
-    if (orderError || !order) {
-      logger.warn(`Order ${threeDData["Order #"]} not found for 3D record`);
-      return;
-    }
-
-    // Store in the order_3d_related table
-    // Try to extract URL from hyperlink if available
-    let imageUrl = threeDData["Attachment 1"];
-
-    // If we have hyperlinks, try to find the URL for this record
-    if (hyperlinks && imageUrl === "view attachment") {
-      // Find the row number for this record and look for hyperlink in column C (Attachment 1)
-      if (worksheet) {
-        const jsonData = XLSX.utils.sheet_to_json<ThreeDData>(worksheet);
-        const recordIndex = jsonData.findIndex(
-          (record) => record["Order #"] === threeDData["Order #"]
-        );
-
-        if (recordIndex !== -1) {
-          // Column C is index 2 (0-based), and we need to account for header row
-          const cellAddress = XLSX.utils.encode_cell({
-            r: recordIndex + 1,
-            c: 2,
-          });
-          const hyperlinkUrl = hyperlinks[cellAddress];
-
-          if (hyperlinkUrl) {
-            imageUrl = hyperlinkUrl;
-            logger.info(
-              `Found hyperlink for order ${threeDData["Order #"]}: ${hyperlinkUrl}`
-            );
-          }
-        }
-      }
-    }
-
-    // If still no URL found, keep the original text
-    // Since image_url is NOT NULL in the database, we keep the original text
-    // This preserves the actual data from the Excel file without hardcoding URLs
-
-    const threeDRecordData = {
-      order_id: order.id,
-      date_added: this.parseDate(threeDData["Date"]),
-      image_url: imageUrl,
-      image_name: "3d_attachment",
-    };
-
-    const { error } = await supabase
-      .from("order_3d_related")
-      .insert(threeDRecordData);
-
-    if (error) {
-      logger.error("Error creating 3D record:", error);
-    } else {
-      logger.info(
-        `✅ 3D record for order ${threeDData["Order #"]} stored in order_3d_related table`
-      );
-    }
-  }
-
   private async importEmployeeComments(workbook: XLSX.WorkBook) {
     logger.info("�� Importing employee comments...");
 
@@ -766,93 +835,98 @@ class OrderImporter {
       } hyperlinks in Employee Comments sheet`
     );
 
-    for (const commentData of jsonData) {
-      try {
-        await this.processEmployeeComment(commentData, hyperlinks, worksheet);
-      } catch (error) {
-        logger.error(
-          `❌ Failed to import employee comment for order ${commentData["Order #"]}:`,
-          error
-        );
-      }
-    }
+    // Batch process employee comments
+    await this.batchProcessEmployeeComments(jsonData, hyperlinks, worksheet);
   }
 
-  private async processEmployeeComment(
-    commentData: EmployeeCommentData,
-    hyperlinks?: Record<string, string>,
-    worksheet?: XLSX.WorkSheet
+  private async batchProcessEmployeeComments(
+    commentsData: EmployeeCommentData[],
+    hyperlinks: Record<string, string>,
+    worksheet: XLSX.WorkSheet
   ) {
-    // Find the order by shopify_order_number
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("id")
-      .eq("shopify_order_number", commentData["Order #"].toString())
-      .single();
+    logger.info(
+      `🚀 Batch processing ${commentsData.length} employee comments...`
+    );
 
-    if (orderError || !order) {
-      logger.warn(
-        `Order ${commentData["Order #"]} not found for employee comment`
-      );
+    // Get all unique order numbers
+    const orderNumbers = [
+      ...new Set(commentsData.map((comment) => comment["Order #"].toString())),
+    ];
+
+    // Batch fetch all orders
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, shopify_order_number")
+      .in("shopify_order_number", orderNumbers);
+
+    if (ordersError) {
+      logger.error("Error fetching orders for employee comments:", ordersError);
       return;
     }
 
-    // Extract file attachment URL if available
-    let fileAttachmentUrl = commentData["File Attachment 1"];
+    // Create order lookup map
+    const orderMap = new Map(
+      orders?.map((order) => [order.shopify_order_number, order.id]) || []
+    );
 
-    // If we have hyperlinks, try to find the URL for this record
-    if (hyperlinks && worksheet && fileAttachmentUrl) {
-      // Find the exact row that matches this comment data
-      const jsonData = XLSX.utils.sheet_to_json<EmployeeCommentData>(worksheet);
-      const recordIndex = jsonData.findIndex(
-        (record) =>
-          record["Order #"] === commentData["Order #"] &&
-          record["Employee Names"] === commentData["Employee Names"] &&
-          record["Date Added"] === commentData["Date Added"] &&
-          record["Comment"] === commentData["Comment"]
-      );
-
-      if (recordIndex !== -1) {
-        // Column E is index 4 (0-based), and we need to account for header row
-        const cellAddress = XLSX.utils.encode_cell({
-          r: recordIndex + 1,
-          c: 4,
-        });
-        const hyperlinkUrl = hyperlinks[cellAddress];
-
-        if (hyperlinkUrl) {
-          fileAttachmentUrl = hyperlinkUrl;
-          logger.info(
-            `Found file attachment hyperlink for order ${commentData["Order #"]}: ${hyperlinkUrl}`
+    // Prepare batch data with hyperlink extraction
+    const batchData = commentsData
+      .map((commentData) => {
+        const orderId = orderMap.get(commentData["Order #"].toString());
+        if (!orderId) {
+          logger.warn(
+            `Order ${commentData["Order #"]} not found for employee comment`
           );
-        } else {
-          logger.debug(
-            `No hyperlink found for cell ${cellAddress} (order ${commentData["Order #"]})`
-          );
+          return null;
         }
+
+        // Extract file attachment URL
+        let fileAttachmentUrl = commentData["File Attachment 1"];
+        if (hyperlinks && worksheet && fileAttachmentUrl) {
+          const jsonData =
+            XLSX.utils.sheet_to_json<EmployeeCommentData>(worksheet);
+          const recordIndex = jsonData.findIndex(
+            (record) =>
+              record["Order #"] === commentData["Order #"] &&
+              record["Employee Names"] === commentData["Employee Names"] &&
+              record["Date Added"] === commentData["Date Added"] &&
+              record["Comment"] === commentData["Comment"]
+          );
+
+          if (recordIndex !== -1) {
+            const cellAddress = XLSX.utils.encode_cell({
+              r: recordIndex + 1,
+              c: 4,
+            });
+            const hyperlinkUrl = hyperlinks[cellAddress];
+            if (hyperlinkUrl) {
+              fileAttachmentUrl = hyperlinkUrl;
+            }
+          }
+        }
+
+        return {
+          order_id: orderId,
+          content: commentData["Comment"],
+          created_at: this.parseDate(commentData["Date Added"]),
+          ...(fileAttachmentUrl && { file_url: fileAttachmentUrl }),
+        };
+      })
+      .filter(Boolean);
+
+    // Batch insert
+    if (batchData.length > 0) {
+      const { error } = await supabase
+        .from("order_employee_comments")
+        .insert(batchData);
+
+      if (error) {
+        logger.error("Error batch inserting employee comments:", error);
       } else {
-        logger.debug(
-          `Could not find exact match for comment data: Order ${commentData["Order #"]}, Employee: ${commentData["Employee Names"]}, Date: ${commentData["Date Added"]}`
+        logger.info(
+          `✅ Successfully batch inserted ${batchData.length} employee comments`
         );
       }
-    }
-
-    // Match the actual order_employee_comments table structure
-    const employeeCommentData = {
-      order_id: order.id,
-      content: commentData["Comment"], // This is the required content field
-      created_at: this.parseDate(commentData["Date Added"]),
-      // Add file attachment URL if available
-      ...(fileAttachmentUrl && { file_url: fileAttachmentUrl }),
-    };
-
-    // Assuming you have an employee_comments table
-    const { error } = await supabase
-      .from("order_employee_comments")
-      .insert(employeeCommentData);
-
-    if (error) {
-      logger.error("Error creating employee comment:", error);
     }
   }
 
