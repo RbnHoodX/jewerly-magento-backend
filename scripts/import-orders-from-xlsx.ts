@@ -144,19 +144,38 @@ class OrderImporter {
   }
 
   private async importMainOrders(workbook: XLSX.WorkBook) {
-    logger.info("📋 Importing main orders...");
+    logger.info("📋 ===== MAIN ORDERS IMPORT =====");
+    logger.info("📋 Starting main orders import...");
 
     const worksheet = workbook.Sheets["Main Order Page"];
     if (!worksheet) {
-      logger.warn("⚠️ 'Main Order Page' sheet not found");
+      logger.error(
+        "❌ MAIN ORDERS IMPORT FAILED: 'Main Order Page' sheet not found in Excel file"
+      );
       return;
     }
 
     const jsonData = XLSX.utils.sheet_to_json<MainOrderData>(worksheet);
-    logger.info(`Found ${jsonData.length} orders to import`);
+    logger.info(
+      `📊 MAIN ORDERS DATA FOUND: ${jsonData.length} orders in Excel`
+    );
+
+    if (jsonData.length === 0) {
+      logger.warn(
+        "⚠️ MAIN ORDERS IMPORT WARNING: No orders found in Excel sheet"
+      );
+      return;
+    }
+
+    // Log sample data for debugging
+    logger.info(
+      `📋 MAIN ORDERS SAMPLE: First order - #${jsonData[0]["Order #"]}, Customer: ${jsonData[0]["Customer Id"]}, Date: ${jsonData[0]["Order Date"]}`
+    );
 
     // Batch process main orders
     await this.batchProcessMainOrders(jsonData);
+
+    logger.info("📋 ===== MAIN ORDERS IMPORT COMPLETE =====");
   }
 
   private async batchProcessMainOrders(ordersData: MainOrderData[]) {
@@ -462,19 +481,38 @@ class OrderImporter {
   }
 
   private async importCustomerNotes(workbook: XLSX.WorkBook) {
-    logger.info("📝 Importing customer notes...");
+    logger.info("📝 ===== CUSTOMER NOTES IMPORT =====");
+    logger.info("📝 Starting customer notes import...");
 
     const worksheet = workbook.Sheets["Customer Notes"];
     if (!worksheet) {
-      logger.warn("⚠️ 'Customer Notes' sheet not found");
+      logger.error(
+        "❌ CUSTOMER NOTES IMPORT FAILED: 'Customer Notes' sheet not found in Excel file"
+      );
       return;
     }
 
     const jsonData = XLSX.utils.sheet_to_json<CustomerNoteData>(worksheet);
-    logger.info(`Found ${jsonData.length} customer notes to import`);
+    logger.info(
+      `📊 CUSTOMER NOTES DATA FOUND: ${jsonData.length} customer notes in Excel`
+    );
+
+    if (jsonData.length === 0) {
+      logger.warn(
+        "⚠️ CUSTOMER NOTES IMPORT WARNING: No customer notes found in Excel sheet"
+      );
+      return;
+    }
+
+    // Log sample data for debugging
+    logger.info(
+      `📋 CUSTOMER NOTES SAMPLE: First note - Order: ${jsonData[0]["Order Number"]}, Status: ${jsonData[0]["Order Status"]}, Date: ${jsonData[0]["Date Added"]}`
+    );
 
     // Batch process customer notes
     await this.batchProcessCustomerNotes(jsonData);
+
+    logger.info("📝 ===== CUSTOMER NOTES IMPORT COMPLETE =====");
   }
 
   private async batchProcessCustomerNotes(notesData: CustomerNoteData[]) {
@@ -537,19 +575,38 @@ class OrderImporter {
   }
 
   private async importDiamonds(workbook: XLSX.WorkBook) {
-    logger.info("💎 Importing diamond deductions...");
+    logger.info("💎 ===== DIAMOND DEDUCTIONS IMPORT =====");
+    logger.info("💎 Starting diamond deductions import...");
 
     const worksheet = workbook.Sheets["Diamondse"];
     if (!worksheet) {
-      logger.warn("⚠️ 'Diamondse' sheet not found");
+      logger.error(
+        "❌ DIAMOND DEDUCTIONS IMPORT FAILED: 'Diamondse' sheet not found in Excel file"
+      );
       return;
     }
 
     const jsonData = XLSX.utils.sheet_to_json<DiamondData>(worksheet);
-    logger.info(`Found ${jsonData.length} diamond records to import`);
+    logger.info(
+      `📊 DIAMOND DEDUCTIONS DATA FOUND: ${jsonData.length} diamond records in Excel`
+    );
+
+    if (jsonData.length === 0) {
+      logger.warn(
+        "⚠️ DIAMOND DEDUCTIONS IMPORT WARNING: No diamond records found in Excel sheet"
+      );
+      return;
+    }
+
+    // Log sample data for debugging
+    logger.info(
+      `📋 DIAMOND DEDUCTIONS SAMPLE: First record - Order: ${jsonData[0]["Order #"]}, Type: ${jsonData[0]["Type"]}, CT Weight: ${jsonData[0]["CT Weight"]}, Stones: ${jsonData[0]["Stones"]}`
+    );
 
     // Batch process diamond deductions
     await this.batchProcessDiamondDeductions(jsonData);
+
+    logger.info("💎 ===== DIAMOND DEDUCTIONS IMPORT COMPLETE =====");
   }
 
   private async batchProcessDiamondDeductions(diamondsData: DiamondData[]) {
@@ -636,27 +693,53 @@ class OrderImporter {
   }
 
   private async importCasting(workbook: XLSX.WorkBook) {
-    logger.info("🏭 Importing casting orders...");
+    logger.info("🏭 ===== CASTING ORDERS IMPORT =====");
+    logger.info("🏭 Starting casting orders import...");
 
     const worksheet = workbook.Sheets["Casting"];
     if (!worksheet) {
-      logger.warn("⚠️ 'Casting' sheet not found");
+      logger.error(
+        "❌ CASTING IMPORT FAILED: 'Casting' sheet not found in Excel file"
+      );
       return;
     }
 
     const jsonData = XLSX.utils.sheet_to_json<CastingData>(worksheet);
-    logger.info(`Found ${jsonData.length} casting records to import`);
+    logger.info(
+      `📊 CASTING DATA FOUND: ${jsonData.length} casting records in Excel`
+    );
+
+    if (jsonData.length === 0) {
+      logger.warn(
+        "⚠️ CASTING IMPORT WARNING: No casting records found in Excel sheet"
+      );
+      return;
+    }
+
+    // Log sample data for debugging
+    logger.info(
+      `📋 CASTING SAMPLE DATA: First record - Order: ${jsonData[0]["Order #"]}, Supplier: ${jsonData[0]["Supplier"]}, Metal: ${jsonData[0]["Metal Type"]}`
+    );
 
     // Batch process casting orders
     await this.batchProcessCastingOrders(jsonData);
+
+    logger.info("🏭 ===== CASTING ORDERS IMPORT COMPLETE =====");
   }
 
   private async batchProcessCastingOrders(castingData: CastingData[]) {
-    logger.info(`🚀 Batch processing ${castingData.length} casting orders...`);
+    logger.info(
+      `🚀 CASTING BATCH PROCESSING: Starting batch processing of ${castingData.length} casting orders...`
+    );
 
     // Get all unique order numbers
     const orderNumbers = Array.from(
       new Set(castingData.map((casting) => casting["Order #"].toString()))
+    );
+    logger.info(
+      `📋 CASTING ORDERS: Found ${
+        orderNumbers.length
+      } unique order numbers: ${orderNumbers.join(", ")}`
     );
 
     // Batch fetch all orders
@@ -666,9 +749,18 @@ class OrderImporter {
       .in("shopify_order_number", orderNumbers);
 
     if (ordersError) {
-      logger.error("Error fetching orders for casting orders:", ordersError);
+      logger.error(
+        "❌ CASTING ERROR: Failed to fetch orders from database:",
+        ordersError
+      );
       return;
     }
+
+    logger.info(
+      `📊 CASTING ORDERS: Found ${
+        orders?.length || 0
+      } matching orders in database`
+    );
 
     // Create order lookup map
     const orderMap = new Map(
@@ -681,53 +773,96 @@ class OrderImporter {
         const orderId = orderMap.get(castingData["Order #"].toString());
         if (!orderId) {
           logger.warn(
-            `Order ${castingData["Order #"]} not found for casting order`
+            `⚠️ CASTING WARNING: Order ${castingData["Order #"]} not found in database for casting order`
           );
           return null;
         }
 
         return {
           order_id: orderId,
-          order_number: castingData["Order #"].toString(),
-          status: "completed", // Default status
+          supplier: castingData["Supplier"] || "Unknown",
+          metal_type: castingData["Metal Type"] || "Unknown",
+          quantity: parseInt(castingData["Qty"]?.toString() || "1") || 1,
+          weight: parseFloat(castingData["Weight"]?.toString() || "0") || 0,
+          price: parseFloat(castingData["Price"]?.toString() || "0") || 0,
         };
       })
       .filter(Boolean);
 
+    logger.info(
+      `📦 CASTING BATCH: Prepared ${batchData.length} casting orders for database insertion`
+    );
+
     // Batch insert
     if (batchData.length > 0) {
-      const { error } = await supabase.from("casting_orders").insert(batchData);
+      const { error } = await supabase.from("order_casting").insert(batchData);
 
       if (error) {
-        logger.error("Error batch inserting casting orders:", error);
+        logger.error(
+          "❌ CASTING ERROR: Failed to insert casting orders into database:",
+          error
+        );
+        logger.error("❌ CASTING ERROR DETAILS:", {
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+        });
       } else {
         logger.info(
-          `✅ Successfully batch inserted ${batchData.length} casting orders`
+          `✅ CASTING SUCCESS: Successfully inserted ${batchData.length} casting orders into order_casting table`
+        );
+        logger.info(
+          `✅ CASTING COMPLETE: All casting orders processed successfully`
         );
       }
+    } else {
+      logger.warn(
+        "⚠️ CASTING WARNING: No casting orders to insert (all orders not found in database)"
+      );
     }
   }
 
   private async importThreeD(workbook: XLSX.WorkBook) {
-    logger.info("🎨 Importing 3D related data...");
+    logger.info("🎨 ===== 3D FILES IMPORT =====");
+    logger.info("🎨 Starting 3D files import...");
 
     const worksheet = workbook.Sheets["3D Related"];
     if (!worksheet) {
-      logger.warn("⚠️ '3D Related' sheet not found");
+      logger.error(
+        "❌ 3D FILES IMPORT FAILED: '3D Related' sheet not found in Excel file"
+      );
       return;
     }
 
     const jsonData = XLSX.utils.sheet_to_json<ThreeDData>(worksheet);
-    logger.info(`Found ${jsonData.length} 3D records to import`);
+    logger.info(
+      `📊 3D FILES DATA FOUND: ${jsonData.length} 3D records in Excel`
+    );
+
+    if (jsonData.length === 0) {
+      logger.warn(
+        "⚠️ 3D FILES IMPORT WARNING: No 3D records found in Excel sheet"
+      );
+      return;
+    }
+
+    // Log sample data for debugging
+    logger.info(
+      `📋 3D FILES SAMPLE: First record - Order: ${jsonData[0]["Order #"]}, Date: ${jsonData[0]["Date"]}, Attachment: ${jsonData[0]["Attachment 1"]}`
+    );
 
     // Try to extract hyperlinks from the worksheet
     const hyperlinks = this.extractHyperlinks(worksheet);
     logger.info(
-      `Found ${Object.keys(hyperlinks).length} hyperlinks in 3D sheet`
+      `🔗 3D FILES HYPERLINKS: Found ${
+        Object.keys(hyperlinks).length
+      } hyperlinks in 3D sheet`
     );
 
     // Batch process 3D records
     await this.batchProcessThreeDRecords(jsonData, hyperlinks, worksheet);
+
+    logger.info("🎨 ===== 3D FILES IMPORT COMPLETE =====");
   }
 
   private async batchProcessThreeDRecords(
