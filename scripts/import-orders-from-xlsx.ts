@@ -219,7 +219,7 @@ class OrderImporter {
     // Batch fetch existing customers
     const { data: existingCustomers, error: fetchError } = await supabase
       .from("customers")
-      .select("id, customer_id")
+      .select("id, customer_id, first_name, last_name, phone")
       .in("customer_id", customerIds);
 
     if (fetchError) {
@@ -227,9 +227,32 @@ class OrderImporter {
       throw fetchError;
     }
 
-    // Create customer lookup map
+    // Also fetch ALL customers to check for name/phone matches
+    const { data: allCustomers, error: allCustomersError } = await supabase
+      .from("customers")
+      .select("id, customer_id, first_name, last_name, phone");
+
+    if (allCustomersError) {
+      logger.error("Error fetching all customers:", allCustomersError);
+      throw allCustomersError;
+    }
+
+    // Create customer lookup map by customer_id
     const existingCustomerMap = new Map(
       existingCustomers?.map((c) => [c.customer_id, c.id]) || []
+    );
+
+    // Create a map for matching by name and phone from ALL customers
+    const existingCustomersByNamePhone = new Map();
+    allCustomers?.forEach((c) => {
+      const key = `${c.first_name}_${c.last_name}_${c.phone}`;
+      existingCustomersByNamePhone.set(key, c);
+    });
+
+    logger.info(
+      `📊 Found ${
+        allCustomers?.length || 0
+      } total customers in database for name/phone matching`
     );
 
     // Prepare new customers to create
@@ -237,14 +260,31 @@ class OrderImporter {
       .filter(
         (order) => !existingCustomerMap.has(order["Customer Id"].toString())
       )
-      .map((order) => ({
-        customer_id: order["Customer Id"].toString(),
-        first_name: order["Billing First Name"] || "Unknown",
-        last_name: order["Billing Last Name"] || "Unknown",
-        email: `customer-${order["Customer Id"]}@example.com`, // Default email
-        phone: order["Billing Tel"] || null,
-        created_at: new Date().toISOString(),
-      }));
+      .map((order) => {
+        const firstName = order["Billing First Name:"] || "Unknown";
+        const lastName = order["Billing Last Name"] || "Unknown";
+        const phone = order["Billing Tel"] || null;
+        const namePhoneKey = `${firstName}_${lastName}_${phone}`;
+
+        // Check if customer exists with same name and phone
+        const existingCustomer = existingCustomersByNamePhone.get(namePhoneKey);
+        if (existingCustomer) {
+          logger.info(
+            `🔄 Found existing customer by name/phone: ${firstName} ${lastName} (${phone})`
+          );
+          return null; // Don't create new customer, will use existing one
+        }
+
+        return {
+          customer_id: order["Customer Id"].toString(),
+          first_name: firstName,
+          last_name: lastName,
+          email: `customer-${order["Customer Id"]}@example.com`,
+          phone: phone,
+          created_at: new Date().toISOString(),
+        };
+      })
+      .filter(Boolean); // Remove null entries
 
     // Remove duplicates based on customer_id
     const uniqueNewCustomers = newCustomers.filter(
@@ -273,6 +313,24 @@ class OrderImporter {
 
       logger.info(`✅ Created ${uniqueNewCustomers.length} new customers`);
     }
+
+    // Handle customers that were found by name/phone but not by customer_id
+    ordersData.forEach((order) => {
+      if (!customerMap.has(order["Customer Id"].toString())) {
+        const firstName = order["Billing First Name:"] || "Unknown";
+        const lastName = order["Billing Last Name"] || "Unknown";
+        const phone = order["Billing Tel"] || null;
+        const namePhoneKey = `${firstName}_${lastName}_${phone}`;
+
+        const existingCustomer = existingCustomersByNamePhone.get(namePhoneKey);
+        if (existingCustomer) {
+          customerMap.set(order["Customer Id"].toString(), existingCustomer.id);
+          logger.info(
+            `🔄 Mapped customer ID ${order["Customer Id"]} to existing customer ${existingCustomer.id}`
+          );
+        }
+      }
+    });
 
     logger.info(
       `✅ Customer batch processing complete - ${customerMap.size} customers available`
@@ -362,7 +420,7 @@ class OrderImporter {
 
         return {
           order_id: orderId,
-          first_name: orderData["Billing First Name"] || "Unknown",
+          first_name: orderData["Billing First Name:"] || "Unknown",
           last_name: orderData["Billing Last Name"] || "Unknown",
           street1: orderData["Billing Street1"] || "",
           city: orderData["Billing City"] || "",
@@ -401,7 +459,7 @@ class OrderImporter {
 
         return {
           order_id: orderId,
-          first_name: orderData["Shipping First Name"] || "Unknown",
+          first_name: orderData["Shipping First Name:"] || "Unknown",
           last_name: orderData["Shipping Last Name"] || "Unknown",
           street1: orderData["Shipping Street1"] || "",
           city: orderData["Shipping City"] || "",
@@ -784,7 +842,7 @@ class OrderImporter {
           metal_type: castingData["Metal Type"] || "Unknown",
           quantity: parseInt(castingData["Qty"]?.toString() || "1") || 1,
           weight: parseFloat(castingData["Weight"]?.toString() || "0") || 0,
-          price: parseFloat(castingData["Price"]?.toString() || "0") || 0,
+          price: this.parsePrice(castingData["Price"]?.toString() || "0"),
         };
       })
       .filter(Boolean);
