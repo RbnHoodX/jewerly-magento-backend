@@ -277,6 +277,7 @@ class OrderImporter {
 
         return {
           customer_id: order["Customer Id"].toString(),
+          name: `${firstName} ${lastName}`.trim(),
           first_name: firstName,
           last_name: lastName,
           email: `customer-${order["Customer Id"]}@example.com`,
@@ -289,7 +290,9 @@ class OrderImporter {
     // Remove duplicates based on customer_id
     const uniqueNewCustomers = newCustomers.filter(
       (customer, index, self) =>
-        index === self.findIndex((c) => c.customer_id === customer.customer_id)
+        customer &&
+        index ===
+          self.findIndex((c) => c && c.customer_id === customer.customer_id)
     );
 
     let customerMap = new Map(existingCustomerMap);
@@ -332,6 +335,48 @@ class OrderImporter {
       }
     });
 
+    // Update existing customers with proper name field if missing
+    const customersToUpdate = Array.from(customerMap.values())
+      .map((customerId) => {
+        const order = ordersData.find(
+          (o) => customerMap.get(o["Customer Id"].toString()) === customerId
+        );
+        if (order) {
+          const firstName = order["Billing First Name:"] || "Unknown";
+          const lastName = order["Billing Last Name"] || "Unknown";
+          return {
+            id: customerId,
+            name: `${firstName} ${lastName}`.trim(),
+            first_name: firstName,
+            last_name: lastName,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    if (customersToUpdate.length > 0) {
+      logger.info(
+        `🔄 Updating ${customersToUpdate.length} existing customers with name information...`
+      );
+      for (const customer of customersToUpdate) {
+        if (customer) {
+          const { error } = await supabase
+            .from("customers")
+            .update({
+              name: customer.name,
+              first_name: customer.first_name,
+              last_name: customer.last_name,
+            })
+            .eq("id", customer.id);
+
+          if (error) {
+            logger.warn(`⚠️ Failed to update customer ${customer.id}:`, error);
+          }
+        }
+      }
+    }
+
     logger.info(
       `✅ Customer batch processing complete - ${customerMap.size} customers available`
     );
@@ -369,12 +414,29 @@ class OrderImporter {
           throw new Error(`Customer not found for order ${order["Order #"]}`);
         }
 
+        // Create billing and shipping names from the order data
+        const billingFirstName = order["Billing First Name:"] || "Unknown";
+        const billingLastName = order["Billing Last Name"] || "Unknown";
+        const shippingFirstName = order["Shipping First Name:"] || "Unknown";
+        const shippingLastName = order["Shipping Last Name"] || "Unknown";
+
+        const billToName = `${billingFirstName} ${billingLastName}`.trim();
+        const shipToName = `${shippingFirstName} ${shippingLastName}`.trim();
+
+        // Calculate total price from Price 1 + Price 2
+        const price1 = this.parsePrice(order["Price 1"] || "0");
+        const price2 = this.parsePrice(order["Price 2"] || "0");
+        const totalPrice = price1 + price2;
+
         return {
           shopify_order_number: order["Order #"].toString(),
           customer_id: customerId,
           order_date: this.parseDate(order["Order Date"]),
           customization_notes: order["Customization Notes"] || null,
           how_did_you_hear: order["How did you hear:"] || null,
+          bill_to_name: billToName,
+          ship_to_name: shipToName,
+          total_amount: totalPrice,
           created_at: new Date().toISOString(),
         };
       });
@@ -399,6 +461,54 @@ class OrderImporter {
       });
 
       logger.info(`✅ Created ${newOrders.length} new orders`);
+    }
+
+    // Update existing orders with billing and shipping names
+    const existingOrdersToUpdate = ordersData
+      .filter((order) => existingOrderMap.has(order["Order #"].toString()))
+      .map((order) => {
+        const billingFirstName = order["Billing First Name:"] || "Unknown";
+        const billingLastName = order["Billing Last Name"] || "Unknown";
+        const shippingFirstName = order["Shipping First Name:"] || "Unknown";
+        const shippingLastName = order["Shipping Last Name"] || "Unknown";
+
+        const billToName = `${billingFirstName} ${billingLastName}`.trim();
+        const shipToName = `${shippingFirstName} ${shippingLastName}`.trim();
+
+        // Calculate total price from Price 1 + Price 2
+        const price1 = this.parsePrice(order["Price 1"] || "0");
+        const price2 = this.parsePrice(order["Price 2"] || "0");
+        const totalPrice = price1 + price2;
+
+        return {
+          orderNumber: order["Order #"].toString(),
+          bill_to_name: billToName,
+          ship_to_name: shipToName,
+          total_amount: totalPrice,
+        };
+      });
+
+    if (existingOrdersToUpdate.length > 0) {
+      logger.info(
+        `🔄 Updating ${existingOrdersToUpdate.length} existing orders with billing, shipping names, and total amount...`
+      );
+      for (const orderUpdate of existingOrdersToUpdate) {
+        const { error } = await supabase
+          .from("orders")
+          .update({
+            bill_to_name: orderUpdate.bill_to_name,
+            ship_to_name: orderUpdate.ship_to_name,
+            total_amount: orderUpdate.total_amount,
+          })
+          .eq("shopify_order_number", orderUpdate.orderNumber);
+
+        if (error) {
+          logger.warn(
+            `⚠️ Failed to update order ${orderUpdate.orderNumber}:`,
+            error
+          );
+        }
+      }
     }
 
     logger.info(
@@ -499,10 +609,24 @@ class OrderImporter {
 
       // Add item 1 if it exists
       if (orderData["SKU 1"]) {
+        // Combine product information 1 and 2 for size (with line breaks)
+        const sizeInfo = [
+          orderData["product Information 1"],
+          orderData["product Information 2"],
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        // Combine comment 1 and 2 for details (with line breaks)
+        const detailsInfo = [orderData["Comment 1"], orderData["Comment 2"]]
+          .filter(Boolean)
+          .join("\n");
+
         orderItems.push({
           order_id: orderId,
           sku: orderData["SKU 1"],
-          details: orderData["product Information 1"] || null,
+          size: sizeInfo || null,
+          details: detailsInfo || null,
           price: this.parsePrice(orderData["Price 1"]).toString(),
           qty: (
             parseInt(orderData["Qty 1"]?.toString() || "1") || 1
@@ -513,10 +637,24 @@ class OrderImporter {
 
       // Add item 2 if it exists
       if (orderData["SKU 2"]) {
+        // For item 2, we'll use the same combined information
+        // since both items are part of the same order
+        const sizeInfo = [
+          orderData["product Information 1"],
+          orderData["product Information 2"],
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const detailsInfo = [orderData["Comment 1"], orderData["Comment 2"]]
+          .filter(Boolean)
+          .join("\n");
+
         orderItems.push({
           order_id: orderId,
           sku: orderData["SKU 2"],
-          details: orderData["product Information 2"] || null,
+          size: sizeInfo || null,
+          details: detailsInfo || null,
           price: this.parsePrice(orderData["Price 2"]).toString(),
           qty: (
             parseInt(orderData["Qty 2"]?.toString() || "1") || 1
