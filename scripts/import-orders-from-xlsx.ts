@@ -155,282 +155,309 @@ class OrderImporter {
     const jsonData = XLSX.utils.sheet_to_json<MainOrderData>(worksheet);
     logger.info(`Found ${jsonData.length} orders to import`);
 
-    for (const orderData of jsonData) {
-      try {
-        await this.processMainOrder(orderData);
-        this.processedOrders.add(orderData["Order #"]);
-      } catch (error) {
-        logger.error(
-          `❌ Failed to import order ${orderData["Order #"]}:`,
-          error
-        );
-      }
-    }
+    // Batch process main orders
+    await this.batchProcessMainOrders(jsonData);
   }
 
-  private async processMainOrder(orderData: MainOrderData) {
-    const orderNumber = orderData["Order #"];
-    logger.info(`Processing order ${orderNumber}...`);
+  private async batchProcessMainOrders(ordersData: MainOrderData[]) {
+    logger.info(`🚀 Batch processing ${ordersData.length} main orders...`);
 
-    // 1. Create/Update Customer
-    const customerId = await this.upsertCustomer(orderData);
+    // Step 1: Batch create/update customers
+    const customerMap = await this.batchUpsertCustomers(ordersData);
 
-    // 2. Create Order
-    const orderId = await this.createOrder(orderData, customerId);
+    // Step 2: Batch create orders
+    const orderMap = await this.batchCreateOrders(ordersData, customerMap);
 
-    // 3. Create Billing Address
-    await this.createBillingAddress(orderData, orderId);
+    // Step 3: Batch create billing addresses
+    await this.batchCreateBillingAddresses(ordersData, orderMap);
 
-    // 4. Create Shipping Address
-    await this.createShippingAddress(orderData, orderId);
+    // Step 4: Batch create shipping addresses
+    await this.batchCreateShippingAddresses(ordersData, orderMap);
 
-    // 5. Create Order Items
-    await this.createOrderItems(orderData, orderId);
+    // Step 5: Batch create order items
+    await this.batchCreateOrderItems(ordersData, orderMap);
 
-    logger.info(`✅ Order ${orderNumber} processed successfully`);
+    // Mark all orders as processed
+    ordersData.forEach((orderData) => {
+      this.processedOrders.add(orderData["Order #"]);
+    });
+
+    logger.info(
+      `✅ Successfully batch processed ${ordersData.length} main orders`
+    );
   }
 
-  private async upsertCustomer(orderData: MainOrderData): Promise<string> {
-    const customerData = {
-      customer_id: orderData["Customer Id"].toString().padStart(6, "0"),
-      email: `${orderData["Billing First Name:"]}.${orderData["Billing Last Name"]}@example.com`, // You might need to adjust this
-      first_name: orderData["Billing First Name:"],
-      last_name: orderData["Billing Last Name"],
-      phone: orderData["Billing Tel"],
-      billing_addr: {
-        first_name: orderData["Billing First Name:"],
-        last_name: orderData["Billing Last Name"],
-        address1: orderData["Billing Street1"],
-        city: orderData["Billing City"],
-        province: orderData["Billing Region"],
-        zip: orderData["Billing PostCode"],
-        country: orderData["Billing Country"],
-        phone: orderData["Billing Tel"],
-      },
-      shipping_addr: {
-        first_name: orderData["Shipping First Name:"],
-        last_name: orderData["Shipping Last Name"],
-        address1: orderData["Shipping Street1"],
-        city: orderData["Shipping City"],
-        province: orderData["Shipping Region"],
-        zip: orderData["Shipping PostCode"],
-        country: orderData["Shipping Country"],
-        phone: orderData["Shipping Tel"],
-      },
-    };
+  private async batchUpsertCustomers(
+    ordersData: MainOrderData[]
+  ): Promise<Map<string, string>> {
+    logger.info(`🚀 Batch upserting customers...`);
 
-    const { data, error } = await supabase
+    // Get unique customer IDs
+    const customerIds = Array.from(
+      new Set(ordersData.map((order) => order["Customer Id"].toString()))
+    );
+
+    // Batch fetch existing customers
+    const { data: existingCustomers, error: fetchError } = await supabase
       .from("customers")
-      .upsert(customerData, { onConflict: "customer_id" })
-      .select()
-      .single();
+      .select("id, customer_id")
+      .in("customer_id", customerIds);
 
-    if (error) {
-      logger.error("Error upserting customer:", error);
-      throw error;
+    if (fetchError) {
+      logger.error("Error fetching existing customers:", fetchError);
+      throw fetchError;
     }
 
-    return data.id;
+    // Create customer lookup map
+    const existingCustomerMap = new Map(
+      existingCustomers?.map((c) => [c.customer_id, c.id]) || []
+    );
+
+    // Prepare new customers to create
+    const newCustomers = ordersData
+      .filter(
+        (order) => !existingCustomerMap.has(order["Customer Id"].toString())
+      )
+      .map((order) => ({
+        customer_id: order["Customer Id"].toString(),
+        first_name: order["Billing First Name"] || "Unknown",
+        last_name: order["Billing Last Name"] || "Unknown",
+        email: `customer-${order["Customer Id"]}@example.com`, // Default email
+        phone: order["Billing Tel"] || null,
+        created_at: new Date().toISOString(),
+      }));
+
+    // Remove duplicates based on customer_id
+    const uniqueNewCustomers = newCustomers.filter(
+      (customer, index, self) =>
+        index === self.findIndex((c) => c.customer_id === customer.customer_id)
+    );
+
+    let customerMap = new Map(existingCustomerMap);
+
+    // Batch insert new customers if any
+    if (uniqueNewCustomers.length > 0) {
+      const { data: insertedCustomers, error: insertError } = await supabase
+        .from("customers")
+        .insert(uniqueNewCustomers)
+        .select("id, customer_id");
+
+      if (insertError) {
+        logger.error("Error inserting new customers:", insertError);
+        throw insertError;
+      }
+
+      // Add new customers to the map
+      insertedCustomers?.forEach((customer) => {
+        customerMap.set(customer.customer_id, customer.id);
+      });
+
+      logger.info(`✅ Created ${uniqueNewCustomers.length} new customers`);
+    }
+
+    logger.info(
+      `✅ Customer batch processing complete - ${customerMap.size} customers available`
+    );
+    return customerMap;
   }
 
-  private async createOrder(
-    orderData: MainOrderData,
-    customerId: string
-  ): Promise<string> {
-    const price1 = this.parsePrice(orderData["Price 1"]);
-    const price2 = this.parsePrice(orderData["Price 2"]);
-    const subtotal1 = this.parsePrice(orderData["Row Subtotal 1"]);
-    const subtotal2 = this.parsePrice(orderData["Row Subtotal 2"]);
+  private async batchCreateOrders(
+    ordersData: MainOrderData[],
+    customerMap: Map<string, string>
+  ): Promise<Map<string, string>> {
+    logger.info(`🚀 Batch creating orders...`);
 
-    const totalAmount = subtotal1 + subtotal2;
-
-    const orderInsertData = {
-      customer_id: customerId,
-      purchase_from: "Shopify",
-      order_date: this.parseDate(orderData["Order Date"]),
-      total_amount: totalAmount,
-      bill_to_name: `${orderData["Billing First Name:"]} ${orderData["Billing Last Name"]}`,
-      ship_to_name: `${orderData["Shipping First Name:"]} ${orderData["Shipping Last Name"]}`,
-      customization_notes: orderData["Customization Notes"],
-      how_did_you_hear: orderData["How did you hear:"],
-      shopify_order_number: orderData["Order #"].toString(),
-    };
-
-    // First check if order already exists
-    const { data: existingOrder } = await supabase
+    // Check for existing orders
+    const orderNumbers = ordersData.map((order) => order["Order #"].toString());
+    const { data: existingOrders, error: fetchError } = await supabase
       .from("orders")
-      .select("id")
-      .eq("shopify_order_number", orderData["Order #"].toString())
-      .single();
+      .select("id, shopify_order_number")
+      .in("shopify_order_number", orderNumbers);
 
-    let data;
-    if (existingOrder) {
-      // Update existing order
-      const { data: updateData, error: updateError } = await supabase
+    if (fetchError) {
+      logger.error("Error fetching existing orders:", fetchError);
+      throw fetchError;
+    }
+
+    const existingOrderMap = new Map(
+      existingOrders?.map((o) => [o.shopify_order_number, o.id]) || []
+    );
+
+    // Prepare new orders to create
+    const newOrders = ordersData
+      .filter((order) => !existingOrderMap.has(order["Order #"].toString()))
+      .map((order) => {
+        const customerId = customerMap.get(order["Customer Id"].toString());
+        if (!customerId) {
+          throw new Error(`Customer not found for order ${order["Order #"]}`);
+        }
+
+        return {
+          shopify_order_number: order["Order #"].toString(),
+          customer_id: customerId,
+          order_date: this.parseDate(order["Order Date"]),
+          customization_notes: order["Customization Notes"] || null,
+          how_did_you_hear: order["How did you hear:"] || null,
+          created_at: new Date().toISOString(),
+        };
+      });
+
+    let orderMap = new Map(existingOrderMap);
+
+    // Batch insert new orders if any
+    if (newOrders.length > 0) {
+      const { data: insertedOrders, error: insertError } = await supabase
         .from("orders")
-        .update(orderInsertData)
-        .eq("id", existingOrder.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        logger.error("Error updating order:", updateError);
-        throw updateError;
-      }
-      data = updateData;
-    } else {
-      // Insert new order
-      const { data: insertData, error: insertError } = await supabase
-        .from("orders")
-        .insert(orderInsertData)
-        .select()
-        .single();
+        .insert(newOrders)
+        .select("id, shopify_order_number");
 
       if (insertError) {
-        logger.error("Error creating order:", insertError);
+        logger.error("Error inserting new orders:", insertError);
         throw insertError;
       }
-      data = insertData;
+
+      // Add new orders to the map
+      insertedOrders?.forEach((order) => {
+        orderMap.set(order.shopify_order_number, order.id);
+      });
+
+      logger.info(`✅ Created ${newOrders.length} new orders`);
     }
 
-    return data.id;
+    logger.info(
+      `✅ Order batch processing complete - ${orderMap.size} orders available`
+    );
+    return orderMap;
   }
 
-  private async createBillingAddress(
-    orderData: MainOrderData,
-    orderId: string
+  private async batchCreateBillingAddresses(
+    ordersData: MainOrderData[],
+    orderMap: Map<string, string>
   ) {
-    const billingAddress = {
-      order_id: orderId,
-      first_name: orderData["Billing First Name:"],
-      last_name: orderData["Billing Last Name"],
-      street1: orderData["Billing Street1"],
-      city: orderData["Billing City"],
-      region: orderData["Billing Region"],
-      postcode: orderData["Billing PostCode"],
-      country: orderData["Billing Country"],
-      phone: orderData["Billing Tel"],
-    };
+    logger.info(`🚀 Batch creating billing addresses...`);
 
-    // Check if billing address already exists
-    const { data: existingBilling } = await supabase
-      .from("order_billing_address")
-      .select("id")
-      .eq("order_id", orderId)
-      .single();
+    const billingAddresses = ordersData
+      .map((orderData) => {
+        const orderId = orderMap.get(orderData["Order #"].toString());
+        if (!orderId) return null;
 
-    if (existingBilling) {
-      // Update existing billing address
-      const { error: updateError } = await supabase
+        return {
+          order_id: orderId,
+          first_name: orderData["Billing First Name"] || "Unknown",
+          last_name: orderData["Billing Last Name"] || "Unknown",
+          street1: orderData["Billing Street1"] || "",
+          city: orderData["Billing City"] || "",
+          region: orderData["Billing Region"] || "",
+          postcode: orderData["Billing PostCode"] || "",
+          country: orderData["Billing Country"] || "",
+          phone: orderData["Billing Tel"] || null,
+        };
+      })
+      .filter(Boolean);
+
+    if (billingAddresses.length > 0) {
+      const { error } = await supabase
         .from("order_billing_address")
-        .update(billingAddress)
-        .eq("id", existingBilling.id);
+        .insert(billingAddresses);
 
-      if (updateError) {
-        logger.error("Error updating billing address:", updateError);
-        throw updateError;
+      if (error) {
+        logger.error("Error batch inserting billing addresses:", error);
+        throw error;
       }
-    } else {
-      // Insert new billing address
-      const { error: insertError } = await supabase
-        .from("order_billing_address")
-        .insert(billingAddress);
 
-      if (insertError) {
-        logger.error("Error creating billing address:", insertError);
-        throw insertError;
-      }
+      logger.info(`✅ Created ${billingAddresses.length} billing addresses`);
     }
   }
 
-  private async createShippingAddress(
-    orderData: MainOrderData,
-    orderId: string
+  private async batchCreateShippingAddresses(
+    ordersData: MainOrderData[],
+    orderMap: Map<string, string>
   ) {
-    const shippingAddress = {
-      order_id: orderId,
-      first_name: orderData["Shipping First Name:"],
-      last_name: orderData["Shipping Last Name"],
-      street1: orderData["Shipping Street1"],
-      city: orderData["Shipping City"],
-      region: orderData["Shipping Region"],
-      postcode: orderData["Shipping PostCode"],
-      country: orderData["Shipping Country"],
-      phone: orderData["Shipping Tel"],
-    };
+    logger.info(`🚀 Batch creating shipping addresses...`);
 
-    // Check if shipping address already exists
-    const { data: existingShipping } = await supabase
-      .from("order_shipping_address")
-      .select("id")
-      .eq("order_id", orderId)
-      .single();
+    const shippingAddresses = ordersData
+      .map((orderData) => {
+        const orderId = orderMap.get(orderData["Order #"].toString());
+        if (!orderId) return null;
 
-    if (existingShipping) {
-      // Update existing shipping address
-      const { error: updateError } = await supabase
+        return {
+          order_id: orderId,
+          first_name: orderData["Shipping First Name"] || "Unknown",
+          last_name: orderData["Shipping Last Name"] || "Unknown",
+          street1: orderData["Shipping Street1"] || "",
+          city: orderData["Shipping City"] || "",
+          region: orderData["Shipping Region"] || "",
+          postcode: orderData["Shipping PostCode"] || "",
+          country: orderData["Shipping Country"] || "",
+          phone: orderData["Shipping Tel"] || null,
+        };
+      })
+      .filter(Boolean);
+
+    if (shippingAddresses.length > 0) {
+      const { error } = await supabase
         .from("order_shipping_address")
-        .update(shippingAddress)
-        .eq("id", existingShipping.id);
+        .insert(shippingAddresses);
 
-      if (updateError) {
-        logger.error("Error updating shipping address:", updateError);
-        throw updateError;
+      if (error) {
+        logger.error("Error batch inserting shipping addresses:", error);
+        throw error;
       }
-    } else {
-      // Insert new shipping address
-      const { error: insertError } = await supabase
-        .from("order_shipping_address")
-        .insert(shippingAddress);
 
-      if (insertError) {
-        logger.error("Error creating shipping address:", insertError);
-        throw insertError;
-      }
+      logger.info(`✅ Created ${shippingAddresses.length} shipping addresses`);
     }
   }
 
-  private async createOrderItems(orderData: MainOrderData, orderId: string) {
-    // Product 1
-    if (orderData["SKU 1"] && orderData["SKU 1"].trim()) {
-      const price1 = this.parsePrice(orderData["Price 1"]);
-      const orderItem1 = {
-        order_id: orderId,
-        sku: orderData["SKU 1"],
-        details: orderData["product Information 1"],
-        price: price1,
-        qty: orderData["Qty 1"] || 1,
-        image: orderData["Product Image 1"],
-      };
+  private async batchCreateOrderItems(
+    ordersData: MainOrderData[],
+    orderMap: Map<string, string>
+  ) {
+    logger.info(`🚀 Batch creating order items...`);
 
-      const { error: error1 } = await supabase
-        .from("order_items")
-        .insert(orderItem1);
+    const orderItems: any[] = [];
 
-      if (error1) {
-        logger.error("Error creating order item 1:", error1);
+    for (const orderData of ordersData) {
+      const orderId = orderMap.get(orderData["Order #"].toString());
+      if (!orderId) continue;
+
+      // Add item 1 if it exists
+      if (orderData["SKU 1"]) {
+        orderItems.push({
+          order_id: orderId,
+          sku: orderData["SKU 1"],
+          details: orderData["product Information 1"] || null,
+          price: this.parsePrice(orderData["Price 1"]).toString(),
+          qty: (
+            parseInt(orderData["Qty 1"]?.toString() || "1") || 1
+          ).toString(),
+          image: orderData["Product Image 1"] || null,
+        });
+      }
+
+      // Add item 2 if it exists
+      if (orderData["SKU 2"]) {
+        orderItems.push({
+          order_id: orderId,
+          sku: orderData["SKU 2"],
+          details: orderData["product Information 2"] || null,
+          price: this.parsePrice(orderData["Price 2"]).toString(),
+          qty: (
+            parseInt(orderData["Qty 2"]?.toString() || "1") || 1
+          ).toString(),
+          image: orderData["Product Image 2"] || null,
+        });
       }
     }
 
-    // Product 2
-    if (orderData["SKU 2"] && orderData["SKU 2"].trim()) {
-      const price2 = this.parsePrice(orderData["Price 2"]);
-      const orderItem2 = {
-        order_id: orderId,
-        sku: orderData["SKU 2"],
-        details: orderData["product Information 2"],
-        price: price2,
-        qty: orderData["Qty 2"] || 1,
-        image: orderData["Product Image 2"],
-      };
+    if (orderItems.length > 0) {
+      const { error } = await supabase.from("order_items").insert(orderItems);
 
-      const { error: error2 } = await supabase
-        .from("order_items")
-        .insert(orderItem2);
-
-      if (error2) {
-        logger.error("Error creating order item 2:", error2);
+      if (error) {
+        logger.error("Error batch inserting order items:", error);
+        throw error;
       }
+
+      logger.info(`✅ Created ${orderItems.length} order items`);
     }
   }
 
@@ -454,9 +481,9 @@ class OrderImporter {
     logger.info(`🚀 Batch processing ${notesData.length} customer notes...`);
 
     // Get all unique order numbers
-    const orderNumbers = [
-      ...new Set(notesData.map((note) => note["Order Number"].toString())),
-    ];
+    const orderNumbers = Array.from(
+      new Set(notesData.map((note) => note["Order Number"].toString()))
+    );
 
     // Batch fetch all orders
     const { data: orders, error: ordersError } = await supabase
@@ -531,9 +558,9 @@ class OrderImporter {
     );
 
     // Get all unique order numbers
-    const orderNumbers = [
-      ...new Set(diamondsData.map((diamond) => diamond["Order #"].toString())),
-    ];
+    const orderNumbers = Array.from(
+      new Set(diamondsData.map((diamond) => diamond["Order #"].toString()))
+    );
 
     // Batch fetch all orders
     const { data: orders, error: ordersError } = await supabase
@@ -628,9 +655,9 @@ class OrderImporter {
     logger.info(`🚀 Batch processing ${castingData.length} casting orders...`);
 
     // Get all unique order numbers
-    const orderNumbers = [
-      ...new Set(castingData.map((casting) => casting["Order #"].toString())),
-    ];
+    const orderNumbers = Array.from(
+      new Set(castingData.map((casting) => casting["Order #"].toString()))
+    );
 
     // Batch fetch all orders
     const { data: orders, error: ordersError } = await supabase
@@ -711,9 +738,9 @@ class OrderImporter {
     logger.info(`🚀 Batch processing ${threeDData.length} 3D records...`);
 
     // Get all unique order numbers
-    const orderNumbers = [
-      ...new Set(threeDData.map((record) => record["Order #"].toString())),
-    ];
+    const orderNumbers = Array.from(
+      new Set(threeDData.map((record) => record["Order #"].toString()))
+    );
 
     // Batch fetch all orders
     const { data: orders, error: ordersError } = await supabase
@@ -849,9 +876,9 @@ class OrderImporter {
     );
 
     // Get all unique order numbers
-    const orderNumbers = [
-      ...new Set(commentsData.map((comment) => comment["Order #"].toString())),
-    ];
+    const orderNumbers = Array.from(
+      new Set(commentsData.map((comment) => comment["Order #"].toString()))
+    );
 
     // Batch fetch all orders
     const { data: orders, error: ordersError } = await supabase
