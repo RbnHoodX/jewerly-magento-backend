@@ -36,7 +36,8 @@
     "api:start": "tsx src/api/server.ts",
     "api:dev": "tsx --watch src/api/server.ts",
     "lint": "eslint .",
-    "import-diamonds": "tsx scripts/import-diamonds-inventory.ts"
+    "import-diamonds": "tsx scripts/import-diamonds-inventory.ts",
+    "import-orders": "tsx scripts/import-orders-from-xlsx.ts"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",
