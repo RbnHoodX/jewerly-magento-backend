@@ -42,6 +42,13 @@ export interface OrderData {
     name: string | null;
     email: string | null;
   };
+  order_items?: Array<{
+    id: string;
+    sku?: string;
+    details?: string;
+    qty: number;
+    price: number;
+  }>;
 }
 
 export class AutomationService {
@@ -171,11 +178,28 @@ export class AutomationService {
           continue;
         }
 
+        // Get order items for this order
+        const { data: orderItems, error: itemsError } = await this.supabase
+          .from("order_items")
+          .select("id, sku, details, qty, price")
+          .eq("order_id", order.id);
+
+        if (itemsError) {
+          this.logger.log(
+            "warn",
+            `Failed to fetch order items for order ${order.id}`,
+            {
+              error: itemsError,
+            }
+          );
+        }
+
         validOrders.push({
           id: order.id,
           shopify_order_number: order.shopify_order_number,
           customer_id: order.customer_id,
           customers: customer,
+          order_items: orderItems || [],
         } as OrderData);
       }
     }
@@ -595,10 +619,16 @@ This is an automated notification from the order management system.`;
     if (!content) {
       return "";
     }
+
+    // Generate order summary from order items
+    const orderSummary = this.generateOrderSummary(order);
+
     const placeholders: Record<string, string> = {
       "{{ order_number }}": order.shopify_order_number || order.id,
+      "{{ order_name }}": order.shopify_order_number || order.id, // Alias for order_name
       "{{ customer_name }}": order.customers.name || "Valued Customer",
       "{{ customer_email }}": order.customers.email || "",
+      "{{ order_summary }}": orderSummary, // Order item details
       "{{ status }}": note.status,
       "{{ note }}": note.note || "",
       "{{ date }}": formatDateToEST(new Date()),
@@ -614,5 +644,22 @@ This is an automated notification from the order management system.`;
     }
 
     return result;
+  }
+
+  /**
+   * Generate order summary from order items
+   */
+  private generateOrderSummary(order: OrderData): string {
+    if (!order.order_items || order.order_items.length === 0) {
+      return "Order details not available";
+    }
+
+    const items = order.order_items.map((item, index) => {
+      const productName = item.details || item.sku || `Item ${index + 1}`;
+      const quantity = item.qty || 1;
+      return `• ${productName} (Qty: ${quantity})`;
+    });
+
+    return items.join("\n");
   }
 }

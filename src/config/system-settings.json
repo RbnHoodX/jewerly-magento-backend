@@ -1,11 +1,10 @@
 {
   "cronJobInterval": 60,
-  "syncEnabled": true,
-  "automationEnabled": true,
+  "syncEnabled": false,
+  "automationEnabled": false,
   "emailNotifications": true,
   "googleSheetsUrl": "",
   "shopifyImportTag": "new order",
   "shopifyProcessedTag": "imported-to-admin",
-  "lastSyncTime": "2025-09-19T08:58:56.263Z",
-  "lastAutomationTime": "2025-09-19T09:05:30.932Z"
+  "lastAutomationTime": "2025-09-26T13:05:59.659Z"
 }

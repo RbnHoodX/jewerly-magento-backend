@@ -2,8 +2,7 @@
 
 import { google } from "googleapis";
 import { Logger } from "../utils/logger";
-import csv from "csv-parser";
-import { Readable } from "stream";
+import { parse } from "csv-parse/sync";
 
 export interface StatusModelRow {
   status: string;
@@ -20,18 +19,6 @@ export interface StatusModelRow {
 export class GoogleSheetsService {
   private logger: Logger;
   private sheets: any;
-  private knownStatuses = [
-    "Casting Order",
-    "Casting Received",
-    "Polishing & Finishing",
-    "Return For Refund Instructions",
-    "Return for replacement instructions",
-    "Return For Refund Received",
-    "Return for replacement received",
-    "Item Shipped",
-    "Casting Order Email Sent",
-    "Casting Order Delay - Jenny",
-  ];
 
   constructor() {
     this.logger = new Logger("GoogleSheetsService");
@@ -81,7 +68,7 @@ export class GoogleSheetsService {
    */
   async importStatusModel(
     url: string,
-    range: string = "A1:H100"
+    range: string = "A1:H1000"
   ): Promise<{ success: boolean; data?: StatusModelRow[]; error?: string }> {
     try {
       const spreadsheetId = GoogleSheetsService.extractSpreadsheetId(url);
@@ -128,34 +115,44 @@ export class GoogleSheetsService {
       });
 
       // Skip header row and parse data
+      const columnMapping = GoogleSheetsService.getColumnMapping();
       const statusModelData: StatusModelRow[] = rows
         .slice(1)
         .map((row: any[], index: number) => {
           // Handle "Instant" wait time
           let waitTime = 0;
-          if (row[2] && row[2].toLowerCase() !== "instant") {
-            waitTime = parseInt(row[2]) || 0;
+          const waitTimeValue = row[columnMapping.wait_time];
+          if (waitTimeValue && waitTimeValue.toLowerCase() !== "instant") {
+            waitTime = parseInt(waitTimeValue) || 0;
           }
 
-          // Clean up email custom message - remove extra quotes and newlines
-          let emailCustomMessage = row[6] || null;
+          // Clean up email custom message - handle template variables
+          let emailCustomMessage =
+            row[columnMapping.email_custom_message] || null;
           if (emailCustomMessage) {
             emailCustomMessage = emailCustomMessage
               .replace(/^"|"$/g, "") // Remove leading/trailing quotes
               .replace(/\\n/g, "\n") // Convert \n to actual newlines
               .trim();
+
+            // Validate template variables
+            this.validateEmailTemplate(emailCustomMessage);
           }
 
           return {
-            status: (row[0] || "").trim(),
-            new_status: (row[1] || "").trim(),
+            status: (row[columnMapping.status] || "").trim(),
+            new_status: (row[columnMapping.new_status] || "").trim(),
             wait_time_business_days: waitTime,
-            description: (row[3] || "").trim(),
-            private_email: row[4] ? (row[4] || "").trim() : null,
-            email_subject: row[5] ? (row[5] || "").trim() : null,
+            description: (row[columnMapping.description] || "").trim(),
+            private_email: row[columnMapping.private_email]
+              ? (row[columnMapping.private_email] || "").trim()
+              : null,
+            email_subject: row[columnMapping.email_subject]
+              ? (row[columnMapping.email_subject] || "").trim()
+              : null,
             email_custom_message: emailCustomMessage,
-            additional_recipients: row[7]
-              ? row[7]
+            additional_recipients: row[columnMapping.additional_recipients]
+              ? row[columnMapping.additional_recipients]
                   .split(",")
                   .map((email: any) => email.trim())
                   .filter((email: any) => email)
@@ -184,266 +181,60 @@ export class GoogleSheetsService {
   }
 
   /**
-   * Parse CSV text into rows using a robust parser for malformed CSV
+   * Parse CSV text using csv-parse library for accurate multi-line parsing
    */
   private async parseCSVWithLibrary(csvText: string): Promise<any[][]> {
-    const lines = csvText.split("\n");
-    const rows: any[][] = [];
-
-    // Get header row
-    const headerLine = lines[0];
-    const headers = this.parseCSVLine(headerLine);
-    rows.push(headers);
-
-    // Known status names to identify data rows
-    const knownStatuses = [
-      "Casting Order",
-      "Casting Received",
-      "Polishing & Finishing",
-      "Return For Refund Instructions",
-      "Return for replacement instructions",
-      "Return For Refund Received",
-      "Return for replacement received",
-      "Item Shipped",
-      "Casting Order Email Sent",
-      "Casting Order Delay - Jenny",
-    ];
-
-    // Find and parse data rows using a more sophisticated approach
-    let i = 1;
-    while (i < lines.length) {
-      const line = lines[i].trim();
-      if (!line) {
-        i++;
-        continue;
-      }
-
-      // Check if this line starts with a known status
-      for (const status of knownStatuses) {
-        if (line.startsWith(status + ",")) {
-          // This is a data row, parse it with multi-line handling
-          const { rowData, nextIndex } = this.parseDataRowWithMultiLine(
-            lines,
-            i,
-            knownStatuses
-          );
-          if (rowData) {
-            rows.push(rowData);
-          }
-          i = nextIndex;
-          break;
-        }
-      }
-      i++;
-    }
-
-    return rows;
-  }
-
-  /**
-   * Parse a data row with proper multi-line handling
-   */
-  private parseDataRowWithMultiLine(
-    allLines: string[],
-    startIndex: number,
-    knownStatuses: string[]
-  ): { rowData: string[] | null; nextIndex: number } {
     try {
-      const startLine = allLines[startIndex];
-      const initialFields = startLine.split(",");
+      const records = parse(csvText, {
+        columns: true,
+        skip_empty_lines: true,
+        quote: '"',
+        escape: '"',
+        delimiter: ",",
+        relax_column_count: true,
+      });
 
-      // Expected fields: Status, New Status, Wait Time, Description, Private Email, Email Subject, Email Custom Message, Additional Recipients
-      const row = new Array(8).fill("");
+      const rows: any[][] = [];
 
-      // Fill in the fields we can get from the first line
-      row[0] = initialFields[0] || ""; // Status
-      row[1] = initialFields[1] || ""; // New Status
-      row[2] = initialFields[2] || ""; // Wait Time
-      row[3] = initialFields[3] || ""; // Description
-      row[4] = initialFields[4] || ""; // Private Email
-      row[5] = initialFields[5] || ""; // Email Subject
+      // Add header row
+      const headerRow = [
+        "Status",
+        "New Status",
+        "Wait Time ( in business days)",
+        "Description",
+        "Private",
+        "Email Subject",
+        "Email Custom Message",
+        "Additional Recipients",
+      ];
+      rows.push(headerRow);
 
-      // Handle Email Custom Message and Additional Recipients
-      let emailCustomMessage = "";
-      let additionalRecipients = "";
-
-      // Check if we have more fields in the first line
-      if (initialFields.length > 6) {
-        emailCustomMessage = initialFields[6] || "";
-        if (initialFields.length > 7) {
-          additionalRecipients = initialFields[7] || "";
+      // Convert each data row to array format
+      records.forEach((row: any) => {
+        // Only process rows that have a valid Status field (not empty or undefined)
+        if (row["Status"] && row["Status"].trim()) {
+          const rowArray = [
+            row["Status"] || "",
+            row["New Status"] || "",
+            row["Wait Time ( in business days)"] || "",
+            row["Description"] || "",
+            row["Private"] || "",
+            row["Email Subject"] || "",
+            row["Email Custom Message"] || "",
+            row["Additional Recipients"] || "",
+          ];
+          rows.push(rowArray);
         }
-      }
+      });
 
-      // Look for multi-line content in subsequent lines
-      let currentIndex = startIndex + 1;
-      let inEmailMessage = false;
-      let inAdditionalRecipients = false;
-
-      while (currentIndex < allLines.length) {
-        const nextLine = allLines[currentIndex].trim();
-
-        if (!nextLine) {
-          currentIndex++;
-          continue;
-        }
-
-        // Check if this is the start of another data row
-        const isNextDataRow = this.knownStatuses.some((status: string) =>
-          nextLine.startsWith(status + ",")
-        );
-        if (isNextDataRow) {
-          break;
-        }
-
-        // This is part of the current row's multi-line content
-        if (!inEmailMessage && !inAdditionalRecipients) {
-          // This is likely part of the email custom message
-          emailCustomMessage += (emailCustomMessage ? "\n" : "") + nextLine;
-          inEmailMessage = true;
-        } else if (inEmailMessage && !inAdditionalRecipients) {
-          // Check if this looks like additional recipients (has email-like content)
-          if (
-            nextLine.includes("@") ||
-            nextLine.includes("email") ||
-            nextLine.includes("recipient")
-          ) {
-            additionalRecipients = nextLine;
-            inAdditionalRecipients = true;
-          } else {
-            emailCustomMessage += "\n" + nextLine;
-          }
-        } else {
-          additionalRecipients += "\n" + nextLine;
-        }
-
-        currentIndex++;
-      }
-
-      row[6] = emailCustomMessage.trim();
-      row[7] = additionalRecipients.trim();
-
-      return { rowData: row, nextIndex: currentIndex };
+      return rows;
     } catch (error) {
-      console.error("Error parsing data row:", error);
-      return { rowData: null, nextIndex: startIndex + 1 };
+      throw new Error(
+        `CSV parsing failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
-  }
-
-  /**
-   * Parse a single data row, handling multi-line content
-   */
-  private parseDataRow(
-    startLine: string,
-    allLines: string[],
-    startIndex: number
-  ): string[] | null {
-    try {
-      // Split the first line to get initial fields
-      const initialFields = startLine.split(",");
-
-      // Expected fields: Status, New Status, Wait Time, Description, Private Email, Email Subject, Email Custom Message, Additional Recipients
-      const row = new Array(8).fill("");
-
-      // Fill in the fields we can get from the first line
-      row[0] = initialFields[0] || ""; // Status
-      row[1] = initialFields[1] || ""; // New Status
-      row[2] = initialFields[2] || ""; // Wait Time
-      row[3] = initialFields[3] || ""; // Description
-      row[4] = initialFields[4] || ""; // Private Email
-      row[5] = initialFields[5] || ""; // Email Subject
-
-      // Handle Email Custom Message and Additional Recipients
-      let emailCustomMessage = "";
-      let additionalRecipients = "";
-
-      // Look for the rest of the content in subsequent lines
-      let currentIndex = startIndex + 1;
-      let inEmailMessage = false;
-      let inAdditionalRecipients = false;
-
-      // Check if we have more fields in the first line
-      if (initialFields.length > 6) {
-        emailCustomMessage = initialFields[6] || "";
-        if (initialFields.length > 7) {
-          additionalRecipients = initialFields[7] || "";
-        }
-      }
-
-      // Look for multi-line content in subsequent lines
-      while (currentIndex < allLines.length) {
-        const nextLine = allLines[currentIndex].trim();
-
-        if (!nextLine) {
-          currentIndex++;
-          continue;
-        }
-
-        // Check if this is the start of another data row
-        const isNextDataRow = this.knownStatuses.some((status: string) =>
-          nextLine.startsWith(status + ",")
-        );
-        if (isNextDataRow) {
-          break;
-        }
-
-        // This is part of the current row's multi-line content
-        if (!inEmailMessage && !inAdditionalRecipients) {
-          // This is likely part of the email custom message
-          emailCustomMessage += (emailCustomMessage ? "\n" : "") + nextLine;
-          inEmailMessage = true;
-        } else if (inEmailMessage && !inAdditionalRecipients) {
-          // Check if this looks like additional recipients (has email-like content)
-          if (
-            nextLine.includes("@") ||
-            nextLine.includes("email") ||
-            nextLine.includes("recipient")
-          ) {
-            additionalRecipients = nextLine;
-            inAdditionalRecipients = true;
-          } else {
-            emailCustomMessage += "\n" + nextLine;
-          }
-        } else {
-          additionalRecipients += "\n" + nextLine;
-        }
-
-        currentIndex++;
-      }
-
-      row[6] = emailCustomMessage.trim();
-      row[7] = additionalRecipients.trim();
-
-      return row;
-    } catch (error) {
-      console.error("Error parsing data row:", error);
-      return null;
-    }
-  }
-
-  /**
-   * Parse a single CSV line
-   */
-  private parseCSVLine(line: string): string[] {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-
-    result.push(current.trim());
-    return result;
   }
 
   /**
@@ -485,18 +276,105 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Validate email template variables
+   */
+  private validateEmailTemplate(template: string): void {
+    const validVariables = [
+      "{{ customer_name }}",
+      "{{ order_name }}",
+      "{{ order_summary }}",
+    ];
+    const templateVariables = template.match(/\{\{\s*\w+\s*\}\}/g) || [];
+
+    const invalidVariables = templateVariables.filter(
+      (variable) => !validVariables.includes(variable)
+    );
+
+    if (invalidVariables.length > 0) {
+      this.logger.log("warn", "Invalid template variables found", {
+        invalidVariables,
+        validVariables,
+        template: template.substring(0, 200) + "...",
+      });
+    }
+  }
+
+  /**
+   * Process email template with order data
+   */
+  static processEmailTemplate(
+    template: string,
+    orderData: {
+      customer_name: string;
+      order_name: string;
+      order_summary: string;
+    }
+  ): string {
+    return template
+      .replace(/\{\{\s*customer_name\s*\}\}/g, orderData.customer_name)
+      .replace(/\{\{\s*order_name\s*\}\}/g, orderData.order_name)
+      .replace(/\{\{\s*order_summary\s*\}\}/g, orderData.order_summary);
+  }
+
+  /**
+   * Extract customer name from order data
+   * This method handles different sources of customer names
+   */
+  static extractCustomerName(orderData: {
+    bill_to_name?: string | null;
+    billing_address?: {
+      first_name?: string;
+      last_name?: string;
+    };
+  }): string {
+    // First try to get from bill_to_name field
+    if (orderData.bill_to_name) {
+      return orderData.bill_to_name.trim();
+    }
+
+    // Then try to get from billing address
+    if (orderData.billing_address) {
+      const firstName = orderData.billing_address.first_name || "";
+      const lastName = orderData.billing_address.last_name || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      if (fullName) {
+        return fullName;
+      }
+    }
+
+    // Fallback to generic name
+    return "Valued Customer";
+  }
+
+  /**
    * Get expected column headers for status model
    */
   static getExpectedHeaders(): string[] {
     return [
       "Status",
       "New Status",
-      "Wait Time (Business Days)",
+      "Wait Time ( in business days)",
       "Description",
-      "Private Email",
+      "Private",
       "Email Subject",
       "Email Custom Message",
       "Additional Recipients",
     ];
+  }
+
+  /**
+   * Get column mapping for the new Google Sheet format
+   */
+  static getColumnMapping(): Record<string, number> {
+    return {
+      status: 0,
+      new_status: 1,
+      wait_time: 2,
+      description: 3,
+      private_email: 4,
+      email_subject: 5,
+      email_custom_message: 6,
+      additional_recipients: 7,
+    };
   }
 }
