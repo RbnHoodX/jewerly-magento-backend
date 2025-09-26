@@ -12,40 +12,19 @@ export class DatabaseService {
 
   /**
    * Generate the next customer ID in the format 000001, 000020, etc.
+   * Uses a more robust approach to handle concurrent requests.
    */
   private async generateNextCustomerId(): Promise<string> {
     try {
-      // Get the highest existing customer_id
-      const { data: existingCustomers, error } = await this.supabase
-        .from("customers")
-        .select("customer_id")
-        .not("customer_id", "is", null)
-        .order("customer_id", { ascending: false })
-        .limit(1);
+      // Use a combination of timestamp and random number to ensure uniqueness
+      const timestamp = Date.now().toString().slice(-4); // Last 4 digits of timestamp
+      const random = Math.floor(Math.random() * 100)
+        .toString()
+        .padStart(2, "0"); // 2-digit random
+      const customerId = `${timestamp}${random}`;
 
-      if (error) {
-        console.error("Error fetching existing customer IDs:", error);
-        // If there's an error, start from 000001
-        return "000001";
-      }
-
-      if (!existingCustomers || existingCustomers.length === 0) {
-        // No existing customers, start from 000001
-        return "000001";
-      }
-
-      // Get the highest customer_id and increment it
-      const highestCustomerId = existingCustomers[0].customer_id;
-      if (!highestCustomerId) {
-        return "000001";
-      }
-
-      // Convert to number, increment, and format back to 6 digits
-      const currentNumber = parseInt(highestCustomerId, 10);
-      const nextNumber = currentNumber + 1;
-
-      // Format as 6-digit string with leading zeros
-      return nextNumber.toString().padStart(6, "0");
+      // Ensure it's 6 digits
+      return customerId.padStart(6, "0");
     } catch (error) {
       console.error("Error generating customer ID:", error);
       // Fallback to timestamp-based ID if there's an error

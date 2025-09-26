@@ -42,13 +42,6 @@ export interface OrderData {
     name: string | null;
     email: string | null;
   };
-  order_items?: Array<{
-    id: string;
-    sku?: string;
-    details?: string;
-    qty: number;
-    price: number;
-  }>;
 }
 
 export class AutomationService {
@@ -656,7 +649,7 @@ This is an automated notification from the order management system.`;
 
     const items = order.order_items.map((item, index) => {
       const productName = item.details || item.sku || `Item ${index + 1}`;
-      const quantity = item.qty || 1;
+      const quantity = item.quantity || 1;
       return `• ${productName} (Qty: ${quantity})`;
     });
 
