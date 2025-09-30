@@ -622,6 +622,11 @@ class OrderImporter {
           .filter(Boolean)
           .join("\n");
 
+        const productImage = orderData["Product Image 1"];
+        const imageUrl = productImage && !productImage.startsWith("http") 
+          ? `https://old-admin.primestyle.com/cron/custom-product/${productImage}`
+          : productImage || null;
+
         orderItems.push({
           order_id: orderId,
           sku: orderData["SKU 1"],
@@ -631,7 +636,7 @@ class OrderImporter {
           qty: (
             parseInt(orderData["Qty 1"]?.toString() || "1") || 1
           ).toString(),
-          image: orderData["Product Image 1"] || null,
+          image: imageUrl,
         });
       }
 
@@ -1118,10 +1123,14 @@ class OrderImporter {
           }
         }
 
+        const finalImageUrl = imageUrl.startsWith("http") 
+          ? imageUrl 
+          : imageUrl ? `https://old-admin.primestyle.com/cron/custom-product/${imageUrl}` : "";
+
         return {
           order_id: orderId,
           date_added: this.parseDate(threeDData["Date"]),
-          image_url: imageUrl,
+          image_url: finalImageUrl,
           image_name: "3d_attachment",
         };
       })

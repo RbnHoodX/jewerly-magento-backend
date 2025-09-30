@@ -566,13 +566,18 @@ class UltraFastOrderImporterV2 {
         const sku = orderData[`SKU ${i}`];
         if (!sku || sku.trim() === "") continue;
 
+        const productImage = orderData[`Product Image ${i}`];
+        const imageUrl = productImage && !productImage.startsWith("http") 
+          ? `https://old-admin.primestyle.com/cron/custom-product/${productImage}`
+          : productImage || null;
+
         const itemInsert = {
           order_id: orderId,
           sku: sku,
           details: orderData[`product Information ${i}`] || "",
           price: parseFloat(orderData[`Price ${i}`] || "0"),
           qty: orderData[`Qty ${i}`] || 1,
-          image: orderData[`Product Image ${i}`] || null,
+          image: imageUrl,
         };
 
         itemInserts.push(itemInsert);

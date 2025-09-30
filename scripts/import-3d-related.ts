@@ -90,9 +90,14 @@ class ThreeDRelatedImporter {
         continue;
       }
 
+      const filePath = threeDItem["File Path"] || "";
+      const imageUrl = filePath.startsWith("http") 
+        ? filePath 
+        : filePath ? `https://old-admin.primestyle.com/cron/custom-product/${filePath}` : "";
+
       const threeDInsert = {
         order_id: orderMap.get(threeDItem["Order #"]),
-        image_url: threeDItem["File Path"] || "",
+        image_url: imageUrl,
         image_name: threeDItem["Design Type"] || "3D Design",
       };
 

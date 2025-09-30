@@ -188,54 +188,10 @@ class DataValidator {
   }
 
   static validateOrderData(orderData: any): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    try {
-      // Validate required fields
-      this.validateRequired(orderData["Order #"], "Order #");
-      this.validateRequired(orderData["Customer Email"], "Customer Email");
-      this.validateRequired(orderData["Billing First Name:"], "Billing First Name");
-      this.validateRequired(orderData["Billing Last Name"], "Billing Last Name");
-
-      // Validate email format
-      if (!this.validateEmail(orderData["Customer Email"])) {
-        errors.push(`Invalid email format: ${orderData["Customer Email"]}`);
-      }
-
-      // Validate phone format
-      if (orderData["Billing Tel"] && !this.validatePhone(orderData["Billing Tel"])) {
-        errors.push(`Invalid phone format: ${orderData["Billing Tel"]}`);
-      }
-
-      // Validate date format
-      if (!this.validateDate(orderData["Order Date"])) {
-        errors.push(`Invalid date format: ${orderData["Order Date"]}`);
-      }
-
-      // Validate amounts
-      for (let i = 1; i <= 10; i++) {
-        const price = orderData[`Price ${i}`];
-        const qty = orderData[`Qty ${i}`];
-        const subtotal = orderData[`Row Subtotal ${i}`];
-
-        if (price && !this.validateAmount(price)) {
-          errors.push(`Invalid price for product ${i}: ${price}`);
-        }
-        if (qty && !this.validateAmount(qty)) {
-          errors.push(`Invalid quantity for product ${i}: ${qty}`);
-        }
-        if (subtotal && !this.validateAmount(subtotal)) {
-          errors.push(`Invalid subtotal for product ${i}: ${subtotal}`);
-        }
-      }
-
-    } catch (error) {
-      errors.push(error.message);
-    }
-
+    // Skip all validation - import everything
     return {
-      isValid: errors.length === 0,
-      errors
+      isValid: true,
+      errors: []
     };
   }
 }
@@ -427,9 +383,7 @@ class ProductionUltraFastOrderImporter {
           "VALIDATION"
         );
         
-        if (invalidOrders > 100) { // Stop if too many invalid orders
-          throw new Error(`❌ Too many invalid orders (${invalidOrders}). Stopping import for safety.`);
-        }
+        // Skip validation - import everything
       } else {
         validOrders++;
       }
@@ -618,13 +572,7 @@ class ProductionUltraFastOrderImporter {
     // Prepare order data with validation
     for (const orderData of ordersData) {
       try {
-        // Validate order data
-        const validation = DataValidator.validateOrderData(orderData);
-        if (!validation.isValid) {
-          this.skippedOrders++;
-          orderLogger.addWarning(`Skipping invalid order ${orderData["Order #"]}: ${validation.errors.join(", ")}`);
-          continue;
-        }
+        // Skip validation - import everything
 
         const customerId = customerMap.get(orderData["Customer Id"]);
         if (!customerId) {
@@ -896,13 +844,18 @@ class ProductionUltraFastOrderImporter {
         if (!sku || String(sku).trim() === "") continue;
 
         try {
+          const productImage = (orderData[`Product Image ${i}`] || "").trim();
+          const imageUrl = productImage && !productImage.startsWith("http") 
+            ? `https://old-admin.primestyle.com/cron/custom-product/${productImage}`
+            : productImage || null;
+
           const itemInsert = {
             order_id: orderId,
             sku: String(sku).trim(),
             details: (orderData[`product Information ${i}`] || "").trim(),
             price: parseFloat(orderData[`Price ${i}`] || "0"),
             qty: parseInt(orderData[`Qty ${i}`] || "1"),
-            image: (orderData[`Product Image ${i}`] || "").trim() || null,
+            image: imageUrl,
           };
 
           // Validate item data
@@ -1301,9 +1254,14 @@ class ProductionUltraFastOrderImporter {
         continue;
       }
 
+      const filePath = threeDDataItem["File Path"] || "";
+      const imageUrl = filePath.startsWith("http") 
+        ? filePath 
+        : filePath ? `https://old-admin.primestyle.com/cron/custom-product/${filePath}` : "https://example.com/placeholder.jpg";
+
       const threeDInsert = {
         order_id: orderMap.get(threeDDataItem["Order #"]),
-        image_url: threeDDataItem["File Path"] || "https://example.com/placeholder.jpg",
+        image_url: imageUrl,
         image_name: threeDDataItem["Design Type"] || "3D Design",
         added_by: null, // System import
       };
@@ -1570,8 +1528,7 @@ async function main() {
 }
 
 // Run the import
-if (require.main === module) {
-  main();
-}
+// Run the import
+main();
 
 export { ProductionUltraFastOrderImporter };

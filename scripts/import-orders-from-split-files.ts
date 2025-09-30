@@ -480,6 +480,7 @@ class SplitFileOrderImporter {
       }
 
       const orderInsert = {
+        shopify_order_number: orderData["Order #"].toString(),
         customer_id: customerId,
         purchase_from: "legacy_import",
         order_date: this.parseDate(orderData["Order Date"]),
@@ -620,6 +621,11 @@ class SplitFileOrderImporter {
         const sku = orderData[`SKU ${i}` as keyof MainOrderData] as string;
         if (!sku || sku.trim() === "") continue;
 
+        const productImage = orderData[`Product Image ${i}` as keyof MainOrderData] as string;
+        const imageUrl = productImage && !productImage.startsWith("http") 
+          ? `https://old-admin.primestyle.com/cron/custom-product/${productImage}`
+          : productImage || null;
+
         const itemInsert = {
           order_id: orderId,
           sku: sku,
@@ -631,10 +637,7 @@ class SplitFileOrderImporter {
             (orderData[`Price ${i}` as keyof MainOrderData] as string) || "0"
           ),
           qty: (orderData[`Qty ${i}` as keyof MainOrderData] as number) || 1,
-          image:
-            (orderData[
-              `Product Image ${i}` as keyof MainOrderData
-            ] as string) || null,
+          image: imageUrl,
         };
 
         itemInserts.push(itemInsert);

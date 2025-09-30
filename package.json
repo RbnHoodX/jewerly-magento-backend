@@ -1,6 +1,7 @@
 {
   "name": "shopify-database-sync",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "build": "tsc && cp -r src/config dist/ 2>/dev/null || true",
@@ -36,7 +37,7 @@
     "api:start": "tsx src/api/server.ts",
     "api:dev": "tsx --watch src/api/server.ts",
     "lint": "eslint .",
-    "import-diamonds": "tsx scripts/import-diamonds-inventory.ts",
+    "import-diamonds": "tsx scripts/import-diamonds.ts",
     "import-orders": "tsx scripts/import-orders-from-xlsx.ts",
     "import-orders-ultra": "tsx scripts/import-orders-ultra-fast-v2.ts",
     "import-orders-production": "tsx scripts/import-orders-ultra-fast-production.ts",
@@ -48,7 +49,6 @@
     "clean-data-fixed": "tsx scripts/clean-import-data-fixed.ts",
     "clean-data-final": "tsx scripts/clean-import-data-final.ts",
     "import-customer-notes": "tsx scripts/import-customer-notes.ts",
-    "import-diamonds": "tsx scripts/import-diamonds.ts",
     "import-casting": "tsx scripts/import-casting.ts",
     "import-3d-related": "tsx scripts/import-3d-related.ts",
     "import-all-related": "npm run import-customer-notes && npm run import-diamonds && npm run import-casting && npm run import-3d-related",
@@ -71,6 +71,7 @@
     "csv-parse": "^6.1.0",
     "csv-parser": "^3.2.0",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "fast-csv": "^5.0.5",
     "googleapis": "^159.0.0",
