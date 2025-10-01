@@ -7,7 +7,7 @@
     "build": "tsc && cp -r src/config dist/ 2>/dev/null || true",
     "build:dev": "tsc",
     "build:bun": "bun build src/api/server.ts --outdir dist --target bun --minify",
-    "start": "node dist/api/server.js",
+    "start": "bun run src/api/server.ts",
     "start:bun": "bun run dist/server.js",
     "dev": "bun --watch src/api/server.ts",
     "sync:once": "tsx src/index.ts --once",

@@ -149,10 +149,15 @@ const startCronJobsIfEnabled = () => {
   }
 };
 
-// Health check endpoint
+// Health check endpoint - respond immediately for Railway
 app.get("/health", (req, res) => {
   console.log("🏥 Health check requested");
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    port: PORT
+  });
 });
 
 // Railway health check endpoint
@@ -718,11 +723,14 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
     console.error(`❌ Server test failed:`, error);
   }
 
-  // Initialize cron service asynchronously after server starts
+  // Initialize cron service asynchronously after server starts (non-blocking)
   console.log("🔄 Initializing cron service...");
-  await initializeCronService();
-  startCronJobsIfEnabled();
-  console.log("✅ Cron service initialization complete");
+  initializeCronService().then(() => {
+    startCronJobsIfEnabled();
+    console.log("✅ Cron service initialization complete");
+  }).catch((error) => {
+    console.error("❌ Cron service initialization failed:", error);
+  });
 });
 
 // Handle server errors
