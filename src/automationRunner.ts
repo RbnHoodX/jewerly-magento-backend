@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { AutomationService } from "./services/automation";
+import { UltraOptimizedAutomationService } from "./services/automationUltraOptimized";
 import { CronService } from "./services/cron";
 import { Logger } from "./utils/logger";
 
@@ -12,7 +12,7 @@ config();
  */
 
 class AutomationRunner {
-  private automationService: AutomationService;
+  private automationService: UltraOptimizedAutomationService;
   private cronService: CronService;
   private logger: Logger;
 
@@ -29,7 +29,8 @@ class AutomationRunner {
       );
     }
 
-    this.automationService = new AutomationService(supabaseUrl, supabaseKey);
+    // Use the ultra-optimized automation service for maximum performance
+    this.automationService = new UltraOptimizedAutomationService(supabaseUrl, supabaseKey);
     this.cronService = new CronService(this.automationService);
   }
 

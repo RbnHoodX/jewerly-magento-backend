@@ -347,7 +347,6 @@ export class DatabaseService {
       customization_notes: updateData.customization_notes,
       previous_order_id: updateData.previous_order_id,
       how_did_you_hear: updateData.how_did_you_hear,
-      order_id: updateData.order_id,
       labor: updateData.labor,
       cad_cost: updateData.cad_cost,
       general_cost: updateData.general_cost,

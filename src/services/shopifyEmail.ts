@@ -197,8 +197,8 @@ export class ShopifyEmailService {
       from: `"PrimeStyle Automation" <${this.fromEmail}>`,
       to: emailData.to,
       subject: emailData.subject,
-      text: emailData.body,
-      html: emailData.body.replace(/\n/g, "<br>"),
+      text: emailData.body || "",
+      html: (emailData.body || "").replace(/\n/g, "<br>"),
       replyTo: emailData.replyTo || this.fromEmail,
     };
 
@@ -244,7 +244,7 @@ export class ShopifyEmailService {
       from: emailData.from || this.fromEmail,
       subject: emailData.subject,
       text: emailData.body,
-      html: emailData.body.replace(/\n/g, "<br>"),
+      html: (emailData.body || "").replace(/\n/g, "<br>"),
     };
 
     const response = await sgMail.send(msg);

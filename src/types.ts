@@ -378,6 +378,7 @@ export interface OrderInsertData {
   ship_to_name?: string;
   delivery_method?: string;
   shopify_order_number?: string;
+  order_id?: string; // Use Shopify order number as order_id
   // Additional fields that may be present in database
   id?: string;
   created_at?: string;
@@ -385,7 +386,6 @@ export interface OrderInsertData {
   customization_notes?: string;
   previous_order_id?: string;
   how_did_you_hear?: string;
-  order_id?: string;
   labor?: number;
   cad_cost?: number;
   general_cost?: number;

@@ -1,11 +1,11 @@
 import { SystemSettingsService } from "./systemSettings";
 import { SyncService } from "./sync";
-import { AutomationService } from "./automation";
+import { UltraOptimizedAutomationService } from "./automationUltraOptimized";
 import { Logger } from "../utils/logger";
 
 export class SystemCronService {
   private syncService: SyncService;
-  private automationService: AutomationService;
+  private automationService: UltraOptimizedAutomationService;
   private logger: Logger;
   private syncIntervalId: NodeJS.Timeout | null = null;
   private automationIntervalId: NodeJS.Timeout | null = null;
@@ -27,7 +27,7 @@ export class SystemCronService {
       );
     }
 
-    this.automationService = new AutomationService(supabaseUrl, supabaseKey);
+    this.automationService = new UltraOptimizedAutomationService(supabaseUrl, supabaseKey);
   }
 
   /**

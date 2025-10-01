@@ -235,6 +235,7 @@ export class SyncService {
       discount_codes: order.discount_codes || [],
       shipping_cost: shippingCost,
       shopify_order_number: order.name, // Store Shopify order number (e.g., #1001, #1002)
+      order_id: order.name, // Use Shopify order number as order_id
       bill_to_name: order.billing_address
         ? `${order.billing_address.first_name || ""} ${
             order.billing_address.last_name || ""

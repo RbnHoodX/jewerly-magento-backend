@@ -2,7 +2,7 @@
 
 import { Logger } from "../utils/logger";
 import { ShopifyEmailService } from "./shopifyEmail";
-import { AutomationService } from "./automation";
+import { UltraOptimizedAutomationService } from "./automationUltraOptimized";
 import { SyncService } from "./sync";
 import { GoogleSheetsService } from "./googleSheets";
 import { StatusModelService } from "./statusModelService";
@@ -118,7 +118,7 @@ export class SystemSettingsService {
         throw new Error("Supabase configuration missing");
       }
 
-      const automationService = new AutomationService(supabaseUrl, supabaseKey);
+      const automationService = new UltraOptimizedAutomationService(supabaseUrl, supabaseKey);
       const result = await automationService.runAutomation();
 
       this.settings.lastAutomationTime = new Date().toISOString();

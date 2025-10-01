@@ -1,13 +1,13 @@
-import { AutomationService } from "./automation";
+import { UltraOptimizedAutomationService } from "./automationUltraOptimized";
 import { Logger } from "../utils/logger";
 
 export class CronService {
-  private automationService: AutomationService;
+  private automationService: UltraOptimizedAutomationService;
   private logger: Logger;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning = false;
 
-  constructor(automationService: AutomationService) {
+  constructor(automationService: UltraOptimizedAutomationService) {
     this.automationService = automationService;
     this.logger = new Logger("CronService");
   }
@@ -26,10 +26,10 @@ export class CronService {
     // Run immediately on start
     this.runAutomation();
 
-    // Then run every hour (3600000 ms)
+    // Then run every 5 minutes (300000 ms) for more frequent processing
     this.intervalId = setInterval(() => {
       this.runAutomation();
-    }, 3600000);
+    }, 300000); // 5 minutes instead of 1 hour
 
     this.logger.log("info", "Cron job started successfully");
   }
