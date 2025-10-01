@@ -56,11 +56,10 @@ export class ShopifyEmailService {
     );
     this.useGmail = !!(this.gmailUser && this.gmailPassword);
 
-    // For production, prefer Gmail over Resend due to Resend's recipient restrictions
-    if (this.useGmail && this.useResend) {
-      this.useResend = false; // Disable Resend in favor of Gmail for production
-      this.logger.log("info", "Using Gmail SMTP instead of Resend for production emails");
-    }
+    // Use only Resend for all email sending
+    this.useSendGrid = false;
+    this.useGmail = false;
+    this.isConfigured = false;
 
     // Initialize Resend if configured
     if (this.useResend) {
@@ -70,26 +69,16 @@ export class ShopifyEmailService {
     // Log configuration status
     this.logger.log("info", "Email Service Configuration:", {
       resendConfigured: this.useResend,
-      sendGridConfigured: this.useSendGrid,
-      gmailConfigured: this.useGmail,
-      shopifyConfigured: this.isConfigured,
       fromEmail: this.fromEmail,
     });
 
     if (this.useResend) {
       this.logger.log("info", "Resend configured for email sending");
-    } else if (this.useSendGrid) {
-      sgMail.setApiKey(this.sendGridApiKey);
-      this.logger.log("info", "SendGrid configured for real email sending");
-    } else if (this.useGmail) {
-      this.logger.log("info", "Gmail SMTP configured for real email sending");
-    } else if (!this.isConfigured) {
+    } else {
       this.logger.log(
         "warn",
         "No email service configured. Using mock email sending."
       );
-    } else {
-      this.logger.log("info", "Shopify API configured for email sending");
     }
   }
 
@@ -114,19 +103,10 @@ export class ShopifyEmailService {
         email_type: emailData.type || "customer",
       });
 
-      // Priority: Resend > SendGrid > Gmail > Shopify
+      // Use only Resend for all email sending
       if (this.useResend) {
         provider = "resend";
         emailId = await this.sendEmailViaResend(emailData);
-      } else if (this.useSendGrid) {
-        provider = "sendgrid";
-        emailId = await this.sendEmailViaSendGrid(emailData);
-      } else if (this.useGmail) {
-        provider = "gmail";
-        emailId = await this.sendEmailViaGmail(emailData);
-      } else if (this.isConfigured) {
-        provider = "shopify";
-        emailId = await this.sendEmailViaShopifyAPI(emailData);
       } else {
         // Return a mock email ID for testing purposes when no service is configured
         emailId = `mock_email_${Date.now()}_${Math.random()
