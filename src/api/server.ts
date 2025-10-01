@@ -178,6 +178,87 @@ app.get("/ping", (req, res) => {
   res.status(200).send("pong");
 });
 
+// Railway email diagnostics endpoint
+app.get("/api/email/diagnostics", (req, res) => {
+  console.log("🔍 Email diagnostics requested");
+  
+  const diagnostics = {
+    environment: {
+      NODE_ENV: process.env.NODE_ENV || "development",
+      RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || "not set",
+      RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN || "not set",
+      PORT: process.env.PORT || "not set"
+    },
+    emailConfig: {
+      GMAIL_USER: process.env.GMAIL_USER ? "SET" : "NOT SET",
+      GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD ? "SET" : "NOT SET",
+      SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? "SET" : "NOT SET",
+      FROM_EMAIL: process.env.FROM_EMAIL || "NOT SET"
+    },
+    server: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      uptime: process.uptime()
+    },
+    timestamp: new Date().toISOString()
+  };
+  
+  res.json(diagnostics);
+});
+
+// Railway email test with detailed error reporting
+app.post("/api/email/test-railway", async (req, res) => {
+  console.log("📧 Railway email test requested");
+  
+  try {
+    const { ShopifyEmailService } = await import("../services/shopifyEmail");
+    const emailService = new ShopifyEmailService();
+    
+    const testEmailData = {
+      to: req.body.to || "creativesoftware.dev1009@gmail.com",
+      subject: "Railway Test Email",
+      body: `This is a test email from Railway deployment at ${new Date().toISOString()}\n\nEnvironment: ${process.env.NODE_ENV || 'development'}\nRailway: ${process.env.RAILWAY_ENVIRONMENT || 'not set'}`,
+      type: "test"
+    };
+    
+    console.log("📧 Attempting to send email via Railway...");
+    const emailId = await emailService.sendEmail(testEmailData);
+    
+    res.json({
+      success: true,
+      message: "Railway test email sent successfully",
+      emailId,
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
+        GMAIL_USER_SET: !!process.env.GMAIL_USER,
+        GMAIL_APP_PASSWORD_SET: !!process.env.GMAIL_APP_PASSWORD
+      }
+    });
+  } catch (error) {
+    console.error("❌ Railway email test failed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Railway email test failed",
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined
+      },
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
+        GMAIL_USER_SET: !!process.env.GMAIL_USER,
+        GMAIL_APP_PASSWORD_SET: !!process.env.GMAIL_APP_PASSWORD,
+        FROM_EMAIL: process.env.FROM_EMAIL
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Test endpoint
 app.get("/test", (req, res) => {
   res.json({
