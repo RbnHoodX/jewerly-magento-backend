@@ -1,5 +1,4 @@
 import { Logger } from "../utils/logger";
-import { Resend } from "resend";
 import sgMail from "@sendgrid/mail";
 import nodemailer from "nodemailer";
 import { EmailLoggingService } from "./emailLoggingService";
@@ -21,15 +20,12 @@ export class ShopifyEmailService {
   private shopifyAccessToken: string;
   private shopifyShopDomain: string;
   private sendGridApiKey: string;
-  private resendApiKey: string;
   private gmailUser: string;
   private gmailPassword: string;
   private fromEmail: string;
   private isConfigured: boolean;
   private useSendGrid: boolean;
-  private useResend: boolean;
   private useGmail: boolean;
-  private resend: Resend | null = null;
 
   constructor() {
     this.logger = new Logger("ShopifyEmailService");
@@ -39,10 +35,9 @@ export class ShopifyEmailService {
     this.shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN || "";
     this.shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
     this.sendGridApiKey = process.env.SENDGRID_API_KEY || "";
-    this.resendApiKey = process.env.RESEND_API_KEY || "";
     this.gmailUser = process.env.GMAIL_USER || "";
     this.gmailPassword = process.env.GMAIL_APP_PASSWORD || "";
-    this.fromEmail = process.env.FROM_EMAIL || "onboarding@resend.dev";
+    this.fromEmail = process.env.FROM_EMAIL || "noreply@primestyle.com";
 
     this.isConfigured = !!(this.shopifyAccessToken && this.shopifyShopDomain);
     this.useSendGrid = !!(
@@ -50,35 +45,17 @@ export class ShopifyEmailService {
       this.sendGridApiKey !== "your_api_key_here" &&
       this.sendGridApiKey.startsWith("SG.")
     );
-    this.useResend = !!(
-      this.resendApiKey &&
-      this.resendApiKey.startsWith("re_")
-    );
     this.useGmail = !!(this.gmailUser && this.gmailPassword);
-
-    // For production, prefer Gmail over Resend due to Resend's recipient restrictions
-    if (this.useGmail && this.useResend) {
-      this.useResend = false; // Disable Resend in favor of Gmail for production
-      this.logger.log("info", "Using Gmail SMTP instead of Resend for production emails");
-    }
-
-    // Initialize Resend if configured
-    if (this.useResend) {
-      this.resend = new Resend(this.resendApiKey);
-    }
 
     // Log configuration status
     this.logger.log("info", "Email Service Configuration:", {
-      resendConfigured: this.useResend,
       sendGridConfigured: this.useSendGrid,
       gmailConfigured: this.useGmail,
       shopifyConfigured: this.isConfigured,
       fromEmail: this.fromEmail,
     });
 
-    if (this.useResend) {
-      this.logger.log("info", "Resend configured for email sending");
-    } else if (this.useSendGrid) {
+    if (this.useSendGrid) {
       sgMail.setApiKey(this.sendGridApiKey);
       this.logger.log("info", "SendGrid configured for real email sending");
     } else if (this.useGmail) {
@@ -94,13 +71,13 @@ export class ShopifyEmailService {
   }
 
   /**
-   * Send an email via Resend, SendGrid, Gmail or Shopify API
+   * Send an email via SendGrid or Shopify API
    */
   async sendEmail(emailData: EmailData): Promise<string> {
     const startTime = Date.now();
     let emailId: string;
     let status: "sent" | "failed" | "pending" = "pending";
-    let provider: "resend" | "gmail" | "sendgrid" | "shopify" = "resend";
+    let provider: "gmail" | "sendgrid" | "shopify" = "gmail";
     let errorMessage: string | undefined;
 
     try {
@@ -114,11 +91,7 @@ export class ShopifyEmailService {
         email_type: emailData.type || "customer",
       });
 
-      // Priority: Resend > SendGrid > Gmail > Shopify
-      if (this.useResend) {
-        provider = "resend";
-        emailId = await this.sendEmailViaResend(emailData);
-      } else if (this.useSendGrid) {
+      if (this.useSendGrid) {
         provider = "sendgrid";
         emailId = await this.sendEmailViaSendGrid(emailData);
       } else if (this.useGmail) {
@@ -179,59 +152,6 @@ export class ShopifyEmailService {
       });
 
       throw error;
-    }
-  }
-
-  /**
-   * Send email via Resend
-   */
-  private async sendEmailViaResend(emailData: EmailData): Promise<string> {
-    this.logger.log("info", "Sending email via Resend", {
-      to: emailData.to,
-      subject: emailData.subject,
-      from: this.fromEmail,
-    });
-
-    if (!this.resend) {
-      throw new Error("Resend is not configured");
-    }
-
-    try {
-      const { data, error } = await this.resend.emails.send({
-        from: emailData.from || this.fromEmail,
-        to: [emailData.to],
-        subject: emailData.subject,
-        html: (emailData.body || "").replace(/\n/g, "<br>"),
-        replyTo: emailData.replyTo || this.fromEmail,
-      });
-
-      if (error) {
-        this.logger.log("error", "Failed to send email via Resend:", error);
-        throw new Error(`Resend send failed: ${error.message}`);
-      }
-
-      const emailId = data?.id || `resend_${Date.now()}`;
-
-      this.logger.log("info", "Email sent successfully via Resend", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via Resend:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-      throw new Error(
-        `Resend send failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
     }
   }
 
@@ -323,36 +243,21 @@ export class ShopifyEmailService {
       to: emailData.to,
       from: emailData.from || this.fromEmail,
       subject: emailData.subject,
-      text: emailData.body || "",
+      text: emailData.body,
       html: (emailData.body || "").replace(/\n/g, "<br>"),
-      replyTo: emailData.replyTo || this.fromEmail,
     };
 
-    try {
-      const [response] = await sgMail.send(msg);
-      const emailId = response.headers["x-message-id"] || `sendgrid_${Date.now()}`;
+    const response = await sgMail.send(msg);
+    const emailId =
+      response[0].headers["x-message-id"] || `sendgrid_${Date.now()}`;
 
-      this.logger.log("info", "Email sent successfully via SendGrid", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
+    this.logger.log("info", "Email sent successfully via SendGrid", {
+      emailId,
+      to: emailData.to,
+      subject: emailData.subject,
+    });
 
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via SendGrid:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-      throw new Error(
-        `SendGrid send failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
+    return emailId;
   }
 
   /**
@@ -362,56 +267,210 @@ export class ShopifyEmailService {
     this.logger.log("info", "Sending email via Shopify API", {
       to: emailData.to,
       subject: emailData.subject,
+      orderId: emailData.orderId,
     });
 
-    const shopifyApiUrl = `https://${this.shopifyShopDomain}/admin/api/2023-10/emails.json`;
+    try {
+      // Method 1: Send order notification (if we have an order ID)
+      if (emailData.orderId) {
+        return await this.sendOrderNotification(emailData);
+      }
 
-    const emailPayload = {
-      email: {
-        to: emailData.to,
-        from: emailData.from || this.fromEmail,
-        subject: emailData.subject,
-        body: emailData.body,
+      // Method 2: Send customer notification (if we have a customer ID)
+      if (emailData.customerId) {
+        return await this.sendCustomerNotification(emailData);
+      }
+
+      // Method 3: Send via webhook trigger
+      return await this.sendViaWebhook(emailData);
+    } catch (error) {
+      this.logger.log(
+        "error",
+        "Shopify API email failed, falling back to webhook",
+        { error }
+      );
+      return await this.sendViaWebhook(emailData);
+    }
+  }
+
+  /**
+   * Send order notification via Shopify API
+   */
+  private async sendOrderNotification(emailData: EmailData): Promise<string> {
+    const url = `https://${this.shopifyShopDomain}.myshopify.com/admin/api/2023-10/orders/${emailData.orderId}/transactions.json`;
+
+    const transactionData = {
+      transaction: {
+        kind: "capture",
+        status: "success",
+        message: emailData.body,
+        parent_id: null,
       },
     };
 
-    try {
-      const response = await fetch(shopifyApiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": this.shopifyAccessToken,
-        },
-        body: JSON.stringify(emailPayload),
-      });
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": this.shopifyAccessToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(transactionData),
+    });
 
-      if (!response.ok) {
-        throw new Error(`Shopify API error: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      const emailId = result.email?.id || `shopify_${Date.now()}`;
-
-      this.logger.log("info", "Email sent successfully via Shopify API", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via Shopify API:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
+    if (!response.ok) {
       throw new Error(
-        `Shopify API send failed: ${
-          error instanceof Error ? error.message : error
-        }`
+        `Shopify API error: ${response.status} ${response.statusText}`
       );
     }
+
+    const result = await response.json();
+    const emailId = `shopify_order_${result.transaction?.id || Date.now()}`;
+
+    this.logger.log("info", "Order notification sent via Shopify API", {
+      emailId,
+      orderId: emailData.orderId,
+      to: emailData.to,
+    });
+
+    return emailId;
+  }
+
+  /**
+   * Send customer notification via Shopify API
+   */
+  private async sendCustomerNotification(
+    emailData: EmailData
+  ): Promise<string> {
+    const url = `https://${this.shopifyShopDomain}.myshopify.com/admin/api/2023-10/customers/${emailData.customerId}/metafields.json`;
+
+    const metafieldData = {
+      metafield: {
+        namespace: "automation",
+        key: "email_notification",
+        value: JSON.stringify({
+          subject: emailData.subject,
+          body: emailData.body,
+          timestamp: new Date().toISOString(),
+        }),
+        type: "json",
+      },
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": this.shopifyAccessToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(metafieldData),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Shopify API error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const result = await response.json();
+    const emailId = `shopify_customer_${result.metafield?.id || Date.now()}`;
+
+    this.logger.log("info", "Customer notification sent via Shopify API", {
+      emailId,
+      customerId: emailData.customerId,
+      to: emailData.to,
+    });
+
+    return emailId;
+  }
+
+  /**
+   * Send email via webhook trigger or real email service fallback
+   */
+  private async sendViaWebhook(emailData: EmailData): Promise<string> {
+    // If SendGrid is available, use it for real email sending
+    if (this.useSendGrid) {
+      this.logger.log("info", "Using SendGrid for webhook fallback", {
+        to: emailData.to,
+        subject: emailData.subject,
+      });
+      return await this.sendEmailViaSendGrid(emailData);
+    }
+
+    // If Gmail is available, use it for real email sending
+    if (this.useGmail) {
+      this.logger.log("info", "Using Gmail SMTP for webhook fallback", {
+        to: emailData.to,
+        subject: emailData.subject,
+      });
+      return await this.sendEmailViaGmail(emailData);
+    }
+
+    // Otherwise, use mock webhook (for testing)
+    const webhookData = {
+      event: "customer_notification",
+      data: {
+        to: emailData.to,
+        subject: emailData.subject,
+        body: emailData.body,
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    const emailId = `shopify_webhook_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    this.logger.log("info", "Mock email triggered via webhook", {
+      emailId,
+      to: emailData.to,
+      subject: emailData.subject,
+      webhookData,
+    });
+
+    return emailId;
+  }
+
+  /**
+   * Alternative implementation using a third-party email service
+   * This would be used if you integrate with SendGrid, Mailgun, etc.
+   */
+  private async sendEmailViaThirdParty(emailData: EmailData): Promise<string> {
+    // Example implementation for SendGrid (you would need to install @sendgrid/mail)
+    /*
+    const sgMail = require('@sendgrid/mail');
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+    const msg = {
+      to: emailData.to,
+      from: emailData.from || process.env.FROM_EMAIL,
+      subject: emailData.subject,
+      text: emailData.body,
+      html: emailData.body.replace(/\n/g, '<br>')
+    };
+
+    const response = await sgMail.send(msg);
+    return response[0].headers['x-message-id'];
+    */
+
+    throw new Error("Third-party email service not implemented");
+  }
+
+  /**
+   * Validate email address format
+   */
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  /**
+   * Sanitize email content to prevent injection attacks
+   */
+  private sanitizeEmailContent(content: string): string {
+    // Basic sanitization - in production, use a proper HTML sanitizer
+    return content
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+      .replace(/javascript:/gi, "")
+      .replace(/on\w+\s*=/gi, "");
   }
 }
