@@ -476,7 +476,6 @@ export class UltraOptimizedAutomationService {
       subject,
       body: message,
       orderId: order.id,
-      orderNumber: order.shopify_order_number,
     });
   }
 
@@ -499,9 +498,8 @@ export class UltraOptimizedAutomationService {
     await this.emailService.sendEmail({
       to: rule.private_email!,
       subject,
-      message,
+      body: message,
       orderId: order.id,
-      orderNumber: order.shopify_order_number,
     });
   }
 

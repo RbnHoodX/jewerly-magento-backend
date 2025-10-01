@@ -1,13 +1,12 @@
 {
   "name": "shopify-database-sync",
   "version": "0.1.0",
-  "type": "module",
   "private": true,
   "scripts": {
     "build": "tsc && cp -r src/config dist/ 2>/dev/null || true",
     "build:dev": "tsc",
     "build:bun": "bun build src/api/server.ts --outdir dist --target bun --minify",
-    "start": "bun run src/api/server.ts",
+    "start": "npm run build && node dist/api/server.js",
     "start:bun": "bun run dist/server.js",
     "dev": "bun --watch src/api/server.ts",
     "sync:once": "tsx src/index.ts --once",
@@ -82,7 +81,8 @@
     "papaparse": "^5.5.3",
     "tslib": "^2.6.3",
     "xlsx": "^0.18.5",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "tsx": "^4.16.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -90,7 +90,6 @@
     "@types/node": "^20.14.12",
     "@types/nodemailer": "^7.0.1",
     "eslint": "^8.57.0",
-    "tsx": "^4.16.2",
     "typescript": "^5.6.2"
   }
 }
