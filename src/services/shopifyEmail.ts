@@ -254,7 +254,7 @@ export class ShopifyEmailService {
     }
 
     const mailOptions = {
-      from: `"PrimeStyle Automation" <${this.fromEmail}>`,
+      from: `"PrimeStyle Jewelry" <${this.fromEmail}>`,
       to: emailData.to,
       subject: emailData.subject,
       text: emailData.body || "",
