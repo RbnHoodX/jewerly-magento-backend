@@ -135,17 +135,8 @@ export class UltraOptimizedAutomationService {
    */
   private async processStatusRuleOptimized(rule: StatusRule): Promise<void> {
     try {
-      this.logger.log(
-        "info",
-        `Processing rule: ${rule.status} -> ${rule.new_status}`
-      );
-
       // Use the most efficient query possible
       const orders = await this.getOrdersWithStatusUltraOptimized(rule.status);
-      this.logger.log(
-        "info",
-        `Found ${orders.length} orders with status: ${rule.status}`
-      );
 
       if (orders.length === 0) {
         return;
@@ -471,12 +462,22 @@ export class UltraOptimizedAutomationService {
     const subject = this.replacePlaceholders(rule.email_subject!, order, note);
     const message = this.replacePlaceholders(rule.email_custom_message!, order, note);
 
-    await this.emailService.sendEmail({
-      to: order.customers.email!,
-      subject,
-      body: message,
-      orderId: order.id,
-    });
+    try {
+      await this.emailService.sendEmail({
+        to: order.customers.email!,
+        subject,
+        body: message,
+        orderId: order.id,
+        type: "customer",
+      });
+    } catch (error) {
+      // Gmail SMTP may block external domains - log but don't fail automation
+      this.logger.log("warn", "Failed to send customer email (Gmail SMTP restriction)", {
+        orderId: order.id,
+        customerEmail: order.customers.email,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
