@@ -1,6 +1,4 @@
 import { Logger } from "../utils/logger";
-import { Resend } from "resend";
-import sgMail from "@sendgrid/mail";
 import nodemailer from "nodemailer";
 import { EmailLoggingService } from "./emailLoggingService";
 
@@ -18,41 +16,23 @@ export interface EmailData {
 export class ShopifyEmailService {
   private logger: Logger;
   private emailLoggingService: EmailLoggingService;
-  private shopifyAccessToken: string;
-  private shopifyShopDomain: string;
-  private sendGridApiKey: string;
-  private resendApiKey: string;
   private gmailUser: string;
   private gmailPassword: string;
   private fromEmail: string;
   private isConfigured: boolean;
-  private useSendGrid: boolean;
-  private useResend: boolean;
   private useGmail: boolean;
-  private resend: Resend | null = null;
 
   constructor() {
     this.logger = new Logger("ShopifyEmailService");
     this.emailLoggingService = new EmailLoggingService();
 
     // Get credentials from environment variables
-    this.shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN || "";
-    this.shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || "";
-    this.sendGridApiKey = process.env.SENDGRID_API_KEY || "";
-    this.resendApiKey = process.env.RESEND_API_KEY || "";
     this.gmailUser = process.env.GMAIL_USER || "";
     this.gmailPassword = process.env.GMAIL_APP_PASSWORD || "";
     this.fromEmail = process.env.FROM_EMAIL || this.gmailUser || "";
 
-    this.isConfigured = !!(this.shopifyAccessToken && this.shopifyShopDomain);
-    this.useSendGrid = !!(
-      this.sendGridApiKey &&
-      this.sendGridApiKey !== "your_api_key_here" &&
-      this.sendGridApiKey.startsWith("SG.")
-    );
-    this.useResend = false; // Disable Resend completely
+    this.isConfigured = true;
     this.useGmail = !!(this.gmailUser && this.gmailPassword);
-    this.useSendGrid = false; // Disable SendGrid
 
     // Log configuration status
     this.logger.log("info", "Email Service Configuration:", {
@@ -69,13 +49,13 @@ export class ShopifyEmailService {
   }
 
   /**
-   * Send an email via Resend, SendGrid, Gmail or Shopify API
+   * Send an email via Gmail SMTP (only method)
    */
   async sendEmail(emailData: EmailData): Promise<string> {
     const startTime = Date.now();
     let emailId: string;
     let status: "sent" | "failed" | "pending" = "pending";
-    let provider: "resend" | "gmail" | "sendgrid" | "shopify" = "gmail";
+    let provider: "gmail" = "gmail";
     let errorMessage: string | undefined;
 
     try {
@@ -149,60 +129,7 @@ export class ShopifyEmailService {
   }
 
   /**
-   * Send email via Resend
-   */
-  private async sendEmailViaResend(emailData: EmailData): Promise<string> {
-    this.logger.log("info", "Sending email via Resend", {
-      to: emailData.to,
-      subject: emailData.subject,
-      from: this.fromEmail,
-    });
-
-    if (!this.resend) {
-      throw new Error("Resend is not configured");
-    }
-
-    try {
-      const { data, error } = await this.resend.emails.send({
-        from: emailData.from || this.fromEmail,
-        to: [emailData.to],
-        subject: emailData.subject,
-        html: (emailData.body || "").replace(/\n/g, "<br>"),
-        replyTo: emailData.replyTo || this.fromEmail,
-      });
-
-      if (error) {
-        this.logger.log("error", "Failed to send email via Resend:", error);
-        throw new Error(`Resend send failed: ${error.message}`);
-      }
-
-      const emailId = data?.id || `resend_${Date.now()}`;
-
-      this.logger.log("info", "Email sent successfully via Resend", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via Resend:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-      throw new Error(
-        `Resend send failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
-  }
-
-  /**
-   * Send email via Gmail SMTP
+   * Send email via Gmail SMTP (only supported provider)
    */
   private async sendEmailViaGmail(emailData: EmailData): Promise<string> {
     this.logger.log("info", "Sending email via Gmail SMTP", {
@@ -276,108 +203,5 @@ export class ShopifyEmailService {
     }
   }
 
-  /**
-   * Send email via SendGrid
-   */
-  private async sendEmailViaSendGrid(emailData: EmailData): Promise<string> {
-    this.logger.log("info", "Sending email via SendGrid", {
-      to: emailData.to,
-      subject: emailData.subject,
-    });
-
-    const msg = {
-      to: emailData.to,
-      from: emailData.from || this.fromEmail,
-      subject: emailData.subject,
-      text: emailData.body || "",
-      html: (emailData.body || "").replace(/\n/g, "<br>"),
-      replyTo: emailData.replyTo || this.fromEmail,
-    };
-
-    try {
-      const [response] = await sgMail.send(msg);
-      const emailId = response.headers["x-message-id"] || `sendgrid_${Date.now()}`;
-
-      this.logger.log("info", "Email sent successfully via SendGrid", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via SendGrid:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-      throw new Error(
-        `SendGrid send failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
-  }
-
-  /**
-   * Send email via Shopify API
-   */
-  private async sendEmailViaShopifyAPI(emailData: EmailData): Promise<string> {
-    this.logger.log("info", "Sending email via Shopify API", {
-      to: emailData.to,
-      subject: emailData.subject,
-    });
-
-    const shopifyApiUrl = `https://${this.shopifyShopDomain}/admin/api/2023-10/emails.json`;
-
-    const emailPayload = {
-      email: {
-        to: emailData.to,
-        from: emailData.from || this.fromEmail,
-        subject: emailData.subject,
-        body: emailData.body,
-      },
-    };
-
-    try {
-      const response = await fetch(shopifyApiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": this.shopifyAccessToken,
-        },
-        body: JSON.stringify(emailPayload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Shopify API error: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      const emailId = result.email?.id || `shopify_${Date.now()}`;
-
-      this.logger.log("info", "Email sent successfully via Shopify API", {
-        emailId,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-
-      return emailId;
-    } catch (error) {
-      this.logger.log("error", "Failed to send email via Shopify API:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
-        to: emailData.to,
-        subject: emailData.subject,
-      });
-      throw new Error(
-        `Shopify API send failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
-  }
+  // All other providers removed to enforce Gmail-only sending.
 }
