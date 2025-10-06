@@ -42,7 +42,7 @@ export class ShopifyEmailService {
     this.resendApiKey = process.env.RESEND_API_KEY || "";
     this.gmailUser = process.env.GMAIL_USER || "";
     this.gmailPassword = process.env.GMAIL_APP_PASSWORD || "";
-    this.fromEmail = process.env.FROM_EMAIL || "onboarding@resend.dev";
+    this.fromEmail = process.env.FROM_EMAIL || this.gmailUser || "";
 
     this.isConfigured = !!(this.shopifyAccessToken && this.shopifyShopDomain);
     this.useSendGrid = !!(
@@ -50,34 +50,20 @@ export class ShopifyEmailService {
       this.sendGridApiKey !== "your_api_key_here" &&
       this.sendGridApiKey.startsWith("SG.")
     );
-    this.useResend = !!(
-      this.resendApiKey &&
-      this.resendApiKey.startsWith("re_")
-    );
+    this.useResend = false; // Disable Resend completely
     this.useGmail = !!(this.gmailUser && this.gmailPassword);
-
-    // Use only Resend for all email sending
-    this.useSendGrid = false;
-    this.useGmail = false;
-    this.isConfigured = false;
-
-    // Initialize Resend if configured
-    if (this.useResend) {
-      this.resend = new Resend(this.resendApiKey);
-    }
+    this.useSendGrid = false; // Disable SendGrid
 
     // Log configuration status
     this.logger.log("info", "Email Service Configuration:", {
-      resendConfigured: this.useResend,
+      gmailConfigured: this.useGmail,
       fromEmail: this.fromEmail,
     });
 
-    if (this.useResend) {
-      this.logger.log("info", "Resend configured for email sending");
-    } else {
+    if (!this.useGmail) {
       this.logger.log(
         "warn",
-        "No email service configured. Using mock email sending."
+        "Gmail SMTP not configured (set GMAIL_USER, GMAIL_APP_PASSWORD, FROM_EMAIL). Using mock email sending."
       );
     }
   }
@@ -89,7 +75,7 @@ export class ShopifyEmailService {
     const startTime = Date.now();
     let emailId: string;
     let status: "sent" | "failed" | "pending" = "pending";
-    let provider: "resend" | "gmail" | "sendgrid" | "shopify" = "resend";
+    let provider: "resend" | "gmail" | "sendgrid" | "shopify" = "gmail";
     let errorMessage: string | undefined;
 
     try {
@@ -103,10 +89,10 @@ export class ShopifyEmailService {
         email_type: emailData.type || "customer",
       });
 
-      // Use only Resend for all email sending
-      if (this.useResend) {
-        provider = "resend";
-        emailId = await this.sendEmailViaResend(emailData);
+      // Use only Gmail SMTP for all email sending
+      if (this.useGmail) {
+        provider = "gmail";
+        emailId = await this.sendEmailViaGmail(emailData);
       } else {
         // Return a mock email ID for testing purposes when no service is configured
         emailId = `mock_email_${Date.now()}_${Math.random()
@@ -115,7 +101,7 @@ export class ShopifyEmailService {
 
         this.logger.log(
           "info",
-          "Mock email sent (no email service configured)",
+          "Mock email sent (no Gmail SMTP configured)",
           {
             emailId: emailId,
             to: emailData.to,
