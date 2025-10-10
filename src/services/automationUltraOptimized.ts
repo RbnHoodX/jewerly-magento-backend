@@ -336,19 +336,37 @@ export class UltraOptimizedAutomationService {
     const endDate = new Date();
     const businessDays = this.calculateBusinessDays(startDate, endDate);
 
+    // Enhanced logging for debugging timing issues
+    this.logger.log("info", `Timing check for order ${orderId}:`, {
+      rule: `${rule.status} -> ${rule.new_status}`,
+      waitTimeRequired: rule.wait_time_business_days,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      businessDaysPassed: businessDays,
+      shouldTransition: businessDays >= rule.wait_time_business_days,
+      latestNoteId: latestNote.id,
+      latestNoteStatus: latestNote.status
+    });
+
     return businessDays >= rule.wait_time_business_days;
   }
 
   /**
    * Calculate business days between two dates (optimized)
+   * FIXED: Now correctly calculates business days AFTER the start date
    */
   private calculateBusinessDays(startDate: Date, endDate: Date): number {
     let count = 0;
     const current = new Date(startDate);
     const end = new Date(endDate);
 
-    while (current <= end) {
+    // Start counting from the NEXT day after the start date
+    current.setDate(current.getDate() + 1);
+
+    while (current < end) { // Changed from <= to < to exclude the end date
       const dayOfWeek = current.getDay();
+      // Monday=1, Tuesday=2, Wednesday=3, Thursday=4, Friday=5
+      // Saturday=6, Sunday=0
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
         count++;
       }
@@ -512,9 +530,23 @@ export class UltraOptimizedAutomationService {
     rule: StatusRule,
     note: OrderCustomerNote
   ): Promise<void> {
-    const emailPromises = rule.additional_recipients!.map(recipient => 
-      this.sendPrivateEmailOptimized(order, rule, note)
-    );
+    const emailPromises = rule.additional_recipients!.map(recipient => {
+      const subject = `[AUTOMATION] ${rule.status} -> ${rule.new_status} - Order ${order.shopify_order_number}`;
+      const message = `
+        Order: ${order.shopify_order_number}
+        Customer: ${order.customers.name} (${order.customers.email})
+        Status Change: ${rule.status} -> ${rule.new_status}
+        Time: ${formatDateTimeToEST(new Date())}
+      `;
+
+      return this.emailService.sendEmail({
+        to: recipient,
+        subject,
+        body: message,
+        orderId: order.id,
+        type: "internal",
+      });
+    });
     
     await Promise.all(emailPromises);
   }
