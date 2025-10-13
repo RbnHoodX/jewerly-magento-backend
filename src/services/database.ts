@@ -436,4 +436,49 @@ export class DatabaseService {
     if (error) throw error;
     return data;
   }
+
+  async updateOrderItems(shopifyOrderNumber: string, orderItems: any[]): Promise<void> {
+    try {
+      // Get the order ID by shopify order number
+      const orderId = await this.getOrderIdByShopifyOrderNumber(shopifyOrderNumber);
+      
+      if (!orderId) {
+        throw new Error(`Order not found for Shopify order number: ${shopifyOrderNumber}`);
+      }
+
+      console.log(`🔄 Updating order items for order ${shopifyOrderNumber} (ID: ${orderId})`);
+
+      // Delete existing order items
+      const { error: deleteError } = await this.supabase
+        .from("order_items")
+        .delete()
+        .eq("order_id", orderId);
+
+      if (deleteError) {
+        throw new Error(`Failed to delete existing order items: ${deleteError.message}`);
+      }
+
+      console.log(`   🗑️ Deleted existing order items`);
+
+      // Insert new order items with updated details
+      const orderItemsWithOrderId = orderItems.map(item => ({
+        ...item,
+        order_id: orderId,
+      }));
+
+      const { error: insertError } = await this.supabase
+        .from("order_items")
+        .insert(orderItemsWithOrderId);
+
+      if (insertError) {
+        throw new Error(`Failed to insert updated order items: ${insertError.message}`);
+      }
+
+      console.log(`   ✅ Inserted ${orderItems.length} updated order items`);
+
+    } catch (error) {
+      console.error(`❌ Failed to update order items for ${shopifyOrderNumber}:`, error);
+      throw error;
+    }
+  }
 }

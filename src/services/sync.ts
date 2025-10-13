@@ -92,6 +92,7 @@ export class SyncService {
       let successfulImports = 0;
       let failedImports = 0;
       let skippedOrders = 0;
+      let updatedOrders = 0;
 
       // Process each order
       for (const order of orders) {
@@ -101,6 +102,8 @@ export class SyncService {
             successfulImports++;
           } else if (result === "skipped") {
             skippedOrders++;
+          } else if (result === "updated") {
+            updatedOrders++;
           }
         } catch (error) {
           this.logger.log("error", `Failed to process order ${order.name}`, {
@@ -116,6 +119,7 @@ export class SyncService {
         successfulImports,
         failedImports,
         skippedOrders,
+        updatedOrders,
         duration,
       };
 
@@ -180,7 +184,7 @@ export class SyncService {
    */
   private async processOrder(
     order: ShopifyOrder
-  ): Promise<"success" | "skipped"> {
+  ): Promise<"success" | "skipped" | "updated"> {
     // Check if order already exists using DatabaseService
     const orderExists = await this.databaseService.checkOrderExists(order.name);
 
@@ -190,8 +194,8 @@ export class SyncService {
     );
 
     if (orderExists) {
-      this.logger.log("info", `Order ${order.name} already exists, skipping`);
-      return "skipped";
+      this.logger.log("info", `Order ${order.name} already exists, updating order items with new specifications`);
+      return await this.updateExistingOrder(order);
     }
 
     // Prepare customer data
@@ -287,7 +291,8 @@ export class SyncService {
 
         const orderSpecificDetails = this.buildOrderSpecificDetails(
           lineItem.title,
-          properties
+          properties,
+          variantDetails.specifications
         );
 
         this.logger.log("debug", `Line item: ${lineItem.title}`, {
@@ -445,8 +450,11 @@ export class SyncService {
 
       const orderItems: OrderItemInsertData[] = await Promise.all(
         order.line_items.map(async (lineItem) => {
-          // Fetch product image URL
+          // Fetch product image URL and variant details
           const imageUrl = await this.shopifyService.getProductImageUrl(
+            lineItem
+          );
+          const variantDetails = await this.shopifyService.getVariantDetails(
             lineItem
           );
 
@@ -459,12 +467,14 @@ export class SyncService {
             "size",
             "ring_size",
           ]);
-          const metalType = this.extractProperty(properties, [
-            "metal",
-            "metal type",
-            "metal_type",
-            "metaltype",
-          ]);
+          const metalType =
+            variantDetails.metalType ||
+            this.extractProperty(properties, [
+              "metal",
+              "metal type",
+              "metal_type",
+              "metaltype",
+            ]);
           const engraving = this.extractProperty(properties, [
             "engraving",
             "personalization",
@@ -473,7 +483,8 @@ export class SyncService {
 
           const orderSpecificDetails = this.buildOrderSpecificDetails(
             lineItem.title,
-            properties
+            properties,
+            variantDetails.specifications
           );
 
           this.logger.log("debug", `Line item: ${lineItem.title}`, {
@@ -547,16 +558,22 @@ export class SyncService {
   }
 
   /**
-   * Build order-specific details from line item title and properties
+   * Build order-specific details from line item title, properties, and variant specifications
    */
   private buildOrderSpecificDetails(
     title: string,
-    properties: Array<{ name: string; value: string }>
+    properties: Array<{ name: string; value: string }>,
+    variantSpecifications?: string
   ): string {
     // Start with the base title
     let details = title;
 
-    // Add order-specific properties
+    // Add variant specifications if available (this contains metal type, carat, color, clarity, etc.)
+    if (variantSpecifications) {
+      details += `\n${variantSpecifications}`;
+    }
+
+    // Add order-specific properties (like ring size, engraving, etc.)
     if (properties && properties.length > 0) {
       const propertyDetails = properties
         .map((prop) => `${prop.name}: ${prop.value}`)
@@ -568,6 +585,85 @@ export class SyncService {
     }
 
     return details;
+  }
+
+  /**
+   * Update existing order with new detailed specifications
+   */
+  private async updateExistingOrder(order: ShopifyOrder): Promise<"updated"> {
+    try {
+      this.logger.log("info", `Updating existing order ${order.name} with new specifications`);
+
+      // Process order items with updated logic
+      const orderItems = await Promise.all(
+        order.line_items.map(async (lineItem) => {
+          // Fetch product image URL and variant details
+          const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
+          const variantDetails = await this.shopifyService.getVariantDetails(lineItem);
+
+          // Extract order-specific properties from line item
+          const properties = lineItem.properties || [];
+
+          // Extract specific properties for database columns
+          const ringSize = this.extractProperty(properties, [
+            "ring size",
+            "size",
+            "ring_size",
+          ]);
+          const metalType =
+            variantDetails.metalType ||
+            this.extractProperty(properties, [
+              "metal",
+              "metal type",
+              "metal_type",
+              "metaltype",
+            ]);
+          const engraving = this.extractProperty(properties, [
+            "engraving",
+            "personalization",
+            "text",
+          ]);
+
+          const orderSpecificDetails = this.buildOrderSpecificDetails(
+            lineItem.title,
+            properties,
+            variantDetails.specifications
+          );
+
+          this.logger.log("debug", `Updated line item: ${lineItem.title}`, {
+            sku: lineItem.sku,
+            productId: lineItem.product_id,
+            variantId: lineItem.variant_id,
+            properties: properties.length,
+            ringSize: ringSize || "Not found",
+            metalType: metalType || "Not found",
+            engraving: engraving || "Not found",
+            imageUrl: imageUrl || "No image found",
+            newDetails: orderSpecificDetails,
+          });
+
+          return {
+            sku: lineItem.sku,
+            details: orderSpecificDetails,
+            price: parseFloat(lineItem.price),
+            qty: lineItem.quantity,
+            image: imageUrl || undefined,
+            size: ringSize || undefined,
+            metal_type: metalType || undefined,
+          };
+        })
+      );
+
+      // Update order items in database
+      await this.databaseService.updateOrderItems(order.name, orderItems);
+
+      this.logger.log("info", `Successfully updated order ${order.name} with new specifications`);
+      return "updated";
+
+    } catch (error) {
+      this.logger.log("error", `Failed to update order ${order.name}`, { error });
+      throw error;
+    }
   }
 
   /**

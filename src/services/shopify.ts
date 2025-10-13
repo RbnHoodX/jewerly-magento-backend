@@ -130,7 +130,7 @@ export class ShopifyService {
     }
   }
 
-  async getVariantDetails(lineItem: any): Promise<{metalType?: string, size?: string}> {
+  async getVariantDetails(lineItem: any): Promise<{metalType?: string, size?: string, specifications?: string}> {
     try {
       if (lineItem.product_id && lineItem.variant_id) {
         const product = await this.fetchProduct(lineItem.product_id);
@@ -141,9 +141,13 @@ export class ShopifyService {
             // Extract metal type from variant title (e.g., "14KT Yellow Gold")
             const metalType = this.extractMetalTypeFromVariant(variant);
             
+            // Get the full variant specifications (e.g., "14KT Yellow Gold / 2.60CT Total / G-H / VS1-VS2 (Our Premium)")
+            const specifications = variant.title || '';
+            
             return {
               metalType: metalType || undefined,
-              size: undefined // Size comes from line item properties
+              size: undefined, // Size comes from line item properties
+              specifications: specifications || undefined
             };
           }
         }
