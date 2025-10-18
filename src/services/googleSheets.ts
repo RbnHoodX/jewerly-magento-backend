@@ -311,9 +311,9 @@ export class GoogleSheetsService {
     }
   ): string {
     return template
-      .replace(/\{\{\s*customer_name\s*\}\}/g, orderData.customer_name)
-      .replace(/\{\{\s*order_name\s*\}\}/g, orderData.order_name)
-      .replace(/\{\{\s*order_summary\s*\}\}/g, orderData.order_summary);
+      .replace(/\{\{\s*customer_name\s*\}\}/g, orderData.customer_name || "")
+      .replace(/\{\{\s*order_name\s*\}\}/g, orderData.order_name || "")
+      .replace(/\{\{\s*order_summary\s*\}\}/g, orderData.order_summary || "");
   }
 
   /**

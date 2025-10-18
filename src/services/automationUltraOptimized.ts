@@ -450,14 +450,12 @@ export class UltraOptimizedAutomationService {
   ): Promise<void> {
     const emailPromises = [];
 
-    // Send customer email if configured
-    if (rule.email_subject && rule.email_custom_message) {
-      emailPromises.push(this.sendCustomerEmailOptimized(order, rule, note));
-    }
-
-    // Send private email if configured
+    // Send private email if configured (INSTEAD OF customer email)
     if (rule.private_email) {
       emailPromises.push(this.sendPrivateEmailOptimized(order, rule, note));
+    } else if (rule.email_subject && rule.email_custom_message) {
+      // Send customer email only if no private email is configured
+      emailPromises.push(this.sendCustomerEmailOptimized(order, rule, note));
     }
 
     // Send additional recipient emails if configured
@@ -519,6 +517,7 @@ export class UltraOptimizedAutomationService {
       subject,
       body: message,
       orderId: order.id,
+      type: "private",
     });
   }
 
@@ -563,12 +562,12 @@ export class UltraOptimizedAutomationService {
     const orderSummary = this.generateOrderSummary(order);
 
     return content
-      .replace(/\{\{ order_number \}\}/g, order.shopify_order_number || "N/A")
-      .replace(/\{\{ order_name \}\}/g, order.shopify_order_number || order.id)
-      .replace(/\{\{ customer_name \}\}/g, order.customers.name || "Customer")
-      .replace(/\{\{ customer_email \}\}/g, order.customers.email || "N/A")
+      .replace(/\{\{ order_number \}\}/g, order.shopify_order_number || "")
+      .replace(/\{\{ order_name \}\}/g, order.shopify_order_number || order.id || "")
+      .replace(/\{\{ customer_name \}\}/g, order.customers.name || "")
+      .replace(/\{\{ customer_email \}\}/g, order.customers.email || "")
       .replace(/\{\{ order_summary \}\}/g, orderSummary)
-      .replace(/\{\{ status \}\}/g, note.status)
+      .replace(/\{\{ status \}\}/g, note.status || "")
       .replace(/\{\{ note \}\}/g, note.content || "")
       .replace(/\{\{ date \}\}/g, formatDateToEST(new Date()))
       .replace(/\{\{ time \}\}/g, formatTimeToEST(new Date()));
