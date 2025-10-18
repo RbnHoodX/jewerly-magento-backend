@@ -1,5 +1,5 @@
 import { Logger } from "../utils/logger";
-import nodemailer from "nodemailer";
+import { google } from "googleapis";
 import { EmailLoggingService } from "./emailLoggingService";
 
 export interface EmailData {
@@ -16,9 +16,11 @@ export interface EmailData {
 export class ShopifyEmailService {
   private logger: Logger;
   private emailLoggingService: EmailLoggingService;
-  private gmailUser: string;
-  private gmailPassword: string;
-  private fromEmail: string;
+  private googleClientId: string;
+  private googleClientSecret: string;
+  private googleRefreshToken: string;
+  private gmailAddress: string;
+  private oauth2Client: any;
   private isConfigured: boolean;
   private useGmail: boolean;
 
@@ -27,29 +29,39 @@ export class ShopifyEmailService {
     this.emailLoggingService = new EmailLoggingService();
 
     // Get credentials from environment variables
-    this.gmailUser = process.env.GMAIL_USER || "";
-    this.gmailPassword = process.env.GMAIL_APP_PASSWORD || "";
-    this.fromEmail = process.env.FROM_EMAIL || this.gmailUser || "";
+    this.googleClientId = process.env.GOOGLE_CLIENT_ID || "";
+    this.googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
+    this.googleRefreshToken = process.env.GOOGLE_REFRESH_TOKEN || "";
+    this.gmailAddress = process.env.GMAIL_ADDRESS || "";
 
     this.isConfigured = true;
-    this.useGmail = !!(this.gmailUser && this.gmailPassword);
+    this.useGmail = !!(this.googleClientId && this.googleClientSecret && this.googleRefreshToken && this.gmailAddress);
+
+    // Set up OAuth2 client
+    if (this.useGmail) {
+      this.oauth2Client = new google.auth.OAuth2(
+        this.googleClientId,
+        this.googleClientSecret
+      );
+      this.oauth2Client.setCredentials({ refresh_token: this.googleRefreshToken });
+    }
 
     // Log configuration status
     this.logger.log("info", "Email Service Configuration:", {
       gmailConfigured: this.useGmail,
-      fromEmail: this.fromEmail,
+      gmailAddress: this.gmailAddress,
     });
 
     if (!this.useGmail) {
       this.logger.log(
         "warn",
-        "Gmail SMTP not configured (set GMAIL_USER, GMAIL_APP_PASSWORD, FROM_EMAIL). Using mock email sending."
+        "Gmail API not configured (set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GMAIL_ADDRESS). Using mock email sending."
       );
     }
   }
 
   /**
-   * Send an email via Gmail SMTP (only method)
+   * Send an email via Gmail API (only method)
    */
   async sendEmail(emailData: EmailData): Promise<string> {
     const startTime = Date.now();
@@ -69,7 +81,7 @@ export class ShopifyEmailService {
         email_type: emailData.type || "customer",
       });
 
-      // Use only Gmail SMTP for all email sending
+      // Use only Gmail API for all email sending
       if (this.useGmail) {
         provider = "gmail";
         emailId = await this.sendEmailViaGmail(emailData);
@@ -81,7 +93,7 @@ export class ShopifyEmailService {
 
         this.logger.log(
           "info",
-          "Mock email sent (no Gmail SMTP configured)",
+          "Mock email sent (no Gmail API configured)",
           {
             emailId: emailId,
             to: emailData.to,
@@ -129,66 +141,45 @@ export class ShopifyEmailService {
   }
 
   /**
-   * Send email via Gmail SMTP (only supported provider)
+   * Send email via Gmail API (only supported provider)
    */
   private async sendEmailViaGmail(emailData: EmailData): Promise<string> {
-    this.logger.log("info", "Sending email via Gmail SMTP", {
+    this.logger.log("info", "Sending email via Gmail API", {
       to: emailData.to,
       subject: emailData.subject,
-      from: this.fromEmail,
+      from: this.gmailAddress,
     });
 
-    // Create transporter with explicit Gmail SMTP settings
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true, // true for 465, false for other ports
-      auth: {
-        user: this.gmailUser,
-        pass: this.gmailPassword,
-      },
-    });
-
-    // Verify connection configuration
     try {
-      await transporter.verify();
-      this.logger.log("info", "Gmail SMTP connection verified successfully");
-    } catch (error) {
-      this.logger.log("error", "Gmail SMTP connection verification failed:", {
-        error: error instanceof Error ? error.message : error,
-        stack: error instanceof Error ? error.stack : undefined,
-        name: error instanceof Error ? error.name : undefined,
+      const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
+      
+      // Build raw message
+      const raw = this.buildRawMessage({
+        from: this.gmailAddress,
+        to: emailData.to,
+        subject: emailData.subject,
+        html: (emailData.body || "").replace(/\n/g, "<br>"),
+        replyTo: emailData.replyTo || this.gmailAddress,
       });
-      throw new Error(
-        `Gmail SMTP connection failed: ${
-          error instanceof Error ? error.message : error
-        }`
-      );
-    }
 
-    const mailOptions = {
-      from: `"PrimeStyle Jewelry" <${this.fromEmail}>`,
-      to: emailData.to,
-      subject: emailData.subject,
-      text: emailData.body || "",
-      html: (emailData.body || "").replace(/\n/g, "<br>"),
-      replyTo: emailData.replyTo || this.fromEmail,
-    };
+      // Send email via Gmail API
+      const response = await gmail.users.messages.send({
+        userId: "me",
+        requestBody: { raw },
+      });
 
-    try {
-      const info = await transporter.sendMail(mailOptions);
-      const emailId = info.messageId || `gmail_${Date.now()}`;
+      const emailId = response.data.id || `gmail_api_${Date.now()}`;
 
-      this.logger.log("info", "Email sent successfully via Gmail SMTP", {
+      this.logger.log("info", "Email sent successfully via Gmail API", {
         emailId,
         to: emailData.to,
         subject: emailData.subject,
-        messageId: info.messageId,
+        messageId: response.data.id,
       });
 
       return emailId;
     } catch (error) {
-      this.logger.log("error", "Failed to send email via Gmail SMTP:", {
+      this.logger.log("error", "Failed to send email via Gmail API:", {
         error: error instanceof Error ? error.message : error,
         stack: error instanceof Error ? error.stack : undefined,
         name: error instanceof Error ? error.name : undefined,
@@ -196,11 +187,33 @@ export class ShopifyEmailService {
         subject: emailData.subject,
       });
       throw new Error(
-        `Gmail SMTP send failed: ${
+        `Gmail API send failed: ${
           error instanceof Error ? error.message : error
         }`
       );
     }
+  }
+
+  /**
+   * Helper to build raw message for Gmail API
+   */
+  private buildRawMessage({ from, to, subject, html, replyTo }: {
+    from: string;
+    to: string;
+    subject: string;
+    html: string;
+    replyTo?: string;
+  }): string {
+    const message =
+      `From: ${from}\r\n` +
+      `To: ${to}\r\n` +
+      `Subject: ${subject}\r\n` +
+      `MIME-Version: 1.0\r\n` +
+      `Content-Type: text/html; charset=UTF-8\r\n` +
+      (replyTo ? `Reply-To: ${replyTo}\r\n` : '') +
+      `\r\n` +
+      html;
+    return Buffer.from(message).toString("base64url");
   }
 
   // All other providers removed to enforce Gmail-only sending.
