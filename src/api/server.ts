@@ -448,13 +448,35 @@ app.post("/api/email/test", async (req, res) => {
       emailLength: email ? email.length : 0,
       headers: req.headers,
       url: req.url,
-      method: req.method
+      method: req.method,
+      rawBody: JSON.stringify(req.body),
+      emailValue: email,
+      emailIsUndefined: email === undefined,
+      emailIsNull: email === null,
+      emailIsEmpty: email === "",
+      emailIsFalsy: !email
     });
     
-    const result = await SystemSettingsService.testEmail(
-      email || "test@example.com"
-    );
-    res.json(result);
+    // Use the email parameter if it exists and is not empty, otherwise use default
+    const emailToUse = email && email.trim() !== "" ? email : "test@example.com";
+    
+    logger.log("info", "Calling testEmail with", {
+      originalEmail: email,
+      emailToUse: emailToUse,
+      willUseDefault: emailToUse === "test@example.com"
+    });
+    
+    const result = await SystemSettingsService.testEmail(emailToUse);
+    
+    // Add a unique identifier to the response to verify it's coming from Railway
+    const responseWithId = {
+      ...result,
+      railwayId: `railway_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      environment: "railway-production"
+    };
+    
+    res.json(responseWithId);
   } catch (error) {
     logger.log("error", "Email test API error", { error });
     res.status(500).json({
