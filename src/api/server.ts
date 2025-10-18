@@ -454,11 +454,16 @@ app.post("/api/email/test", async (req, res) => {
       emailIsUndefined: email === undefined,
       emailIsNull: email === null,
       emailIsEmpty: email === "",
-      emailIsFalsy: !email
+      emailIsFalsy: !email,
+      bodyKeys: Object.keys(req.body || {}),
+      bodyStringified: JSON.stringify(req.body, null, 2)
     });
     
     // Use the email parameter if it exists and is not empty, otherwise use default
-    const emailToUse = email && email.trim() !== "" ? email : "test@example.com";
+    // Also check for 'to' parameter as fallback
+    const emailToUse = (email && email.trim() !== "") ? email : 
+                      (req.body.to && req.body.to.trim() !== "") ? req.body.to : 
+                      "test@example.com";
     
     logger.log("info", "Calling testEmail with", {
       originalEmail: email,
