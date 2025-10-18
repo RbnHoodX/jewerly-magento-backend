@@ -146,7 +146,12 @@ export class SystemSettingsService {
     emailAddress: string = "test@example.com"
   ): Promise<OperationResult> {
     try {
-      this.logger.log("info", "Testing email sending", { emailAddress });
+      this.logger.log("info", "Testing email sending", { 
+        emailAddress,
+        emailType: typeof emailAddress,
+        emailLength: emailAddress ? emailAddress.length : 0,
+        isDefault: emailAddress === "test@example.com"
+      });
 
       // Log environment variables for debugging
       this.logger.log("info", "Email service environment check", {

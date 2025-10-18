@@ -217,7 +217,7 @@ app.post("/api/email/test-railway", async (req, res) => {
     const emailService = new ShopifyEmailService();
     
     const testEmailData = {
-      to: req.body.to || "creativesoftware.dev1009@gmail.com",
+      to: req.body.email || req.body.to || "creativesoftware.dev1009@gmail.com",
       subject: "Railway Test Email",
       body: `This is a test email from Railway deployment at ${new Date().toISOString()}\n\nEnvironment: ${process.env.NODE_ENV || 'development'}\nRailway: ${process.env.RAILWAY_ENVIRONMENT || 'not set'}`,
       type: "test"
@@ -439,6 +439,18 @@ app.get("/api/automation/status", (req, res) => {
 app.post("/api/email/test", async (req, res) => {
   try {
     const { email } = req.body;
+    
+    // Debug logging
+    logger.log("info", "Email test request received", {
+      body: req.body,
+      email: email,
+      emailType: typeof email,
+      emailLength: email ? email.length : 0,
+      headers: req.headers,
+      url: req.url,
+      method: req.method
+    });
+    
     const result = await SystemSettingsService.testEmail(
       email || "test@example.com"
     );
