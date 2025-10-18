@@ -190,10 +190,11 @@ app.get("/api/email/diagnostics", (req, res) => {
       PORT: process.env.PORT || "not set"
     },
     emailConfig: {
-      GMAIL_USER: process.env.GMAIL_USER ? "SET" : "NOT SET",
-      GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD ? "SET" : "NOT SET",
-      SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? "SET" : "NOT SET",
-      FROM_EMAIL: process.env.FROM_EMAIL || "NOT SET"
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? "SET" : "NOT SET",
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "SET" : "NOT SET",
+      GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN ? "SET" : "NOT SET",
+      GMAIL_ADDRESS: process.env.GMAIL_ADDRESS || "NOT SET",
+      SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? "SET" : "NOT SET"
     },
     server: {
       nodeVersion: process.version,
@@ -233,8 +234,10 @@ app.post("/api/email/test-railway", async (req, res) => {
       environment: {
         NODE_ENV: process.env.NODE_ENV,
         RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
-        GMAIL_USER_SET: !!process.env.GMAIL_USER,
-        GMAIL_APP_PASSWORD_SET: !!process.env.GMAIL_APP_PASSWORD
+        GOOGLE_CLIENT_ID_SET: !!process.env.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET_SET: !!process.env.GOOGLE_CLIENT_SECRET,
+        GOOGLE_REFRESH_TOKEN_SET: !!process.env.GOOGLE_REFRESH_TOKEN,
+        GMAIL_ADDRESS_SET: !!process.env.GMAIL_ADDRESS
       }
     });
   } catch (error) {
@@ -250,9 +253,10 @@ app.post("/api/email/test-railway", async (req, res) => {
       environment: {
         NODE_ENV: process.env.NODE_ENV,
         RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT,
-        GMAIL_USER_SET: !!process.env.GMAIL_USER,
-        GMAIL_APP_PASSWORD_SET: !!process.env.GMAIL_APP_PASSWORD,
-        FROM_EMAIL: process.env.FROM_EMAIL
+        GOOGLE_CLIENT_ID_SET: !!process.env.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET_SET: !!process.env.GOOGLE_CLIENT_SECRET,
+        GOOGLE_REFRESH_TOKEN_SET: !!process.env.GOOGLE_REFRESH_TOKEN,
+        GMAIL_ADDRESS_SET: !!process.env.GMAIL_ADDRESS
       },
       timestamp: new Date().toISOString()
     });
@@ -267,6 +271,40 @@ app.get("/test", (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
   });
+});
+
+// Gmail API configuration test endpoint
+app.get("/api/email/config-test", async (req, res) => {
+  try {
+    const { ShopifyEmailService } = await import("../services/shopifyEmail");
+    const emailService = new ShopifyEmailService();
+    
+    res.json({
+      success: true,
+      message: "Gmail API configuration test",
+      environment: {
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? "SET" : "NOT SET",
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "SET" : "NOT SET", 
+        GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN ? "SET" : "NOT SET",
+        GMAIL_ADDRESS: process.env.GMAIL_ADDRESS || "NOT SET",
+        NODE_ENV: process.env.NODE_ENV,
+        RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Configuration test failed",
+      error: error instanceof Error ? error.message : String(error),
+      environment: {
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? "SET" : "NOT SET",
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "SET" : "NOT SET",
+        GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN ? "SET" : "NOT SET", 
+        GMAIL_ADDRESS: process.env.GMAIL_ADDRESS || "NOT SET"
+      }
+    });
+  }
 });
 
 // Debug endpoint

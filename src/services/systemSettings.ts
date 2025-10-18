@@ -150,10 +150,11 @@ export class SystemSettingsService {
 
       // Log environment variables for debugging
       this.logger.log("info", "Email service environment check", {
-        GMAIL_USER: process.env.GMAIL_USER ? "SET" : "NOT SET",
-        GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD ? "SET" : "NOT SET",
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? "SET" : "NOT SET",
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "SET" : "NOT SET",
+        GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN ? "SET" : "NOT SET",
+        GMAIL_ADDRESS: process.env.GMAIL_ADDRESS || "NOT SET",
         SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? "SET" : "NOT SET",
-        FROM_EMAIL: process.env.FROM_EMAIL || "NOT SET",
       });
 
       const emailService = new ShopifyEmailService();
