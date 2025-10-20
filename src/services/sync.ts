@@ -228,6 +228,11 @@ export class SyncService {
     // Get shipping cost
     const shippingCost = parseFloat(order.total_shipping || "0");
 
+    // Log if order has notes
+    if (order.note) {
+      this.logger.log("info", `Order ${order.name} has notes: ${order.note.substring(0, 100)}${order.note.length > 100 ? '...' : ''}`);
+    }
+
     // Prepare order data
     const orderData: OrderInsertData = {
       purchase_from: "shopify",
@@ -240,6 +245,7 @@ export class SyncService {
       shipping_cost: shippingCost,
       shopify_order_number: order.name, // Store Shopify order number (e.g., #1001, #1002)
       order_id: order.name, // Use Shopify order number as order_id
+      customization_notes: order.note || undefined, // Import Shopify order notes to customization_notes
       bill_to_name: order.billing_address
         ? `${order.billing_address.first_name || ""} ${
             order.billing_address.last_name || ""
