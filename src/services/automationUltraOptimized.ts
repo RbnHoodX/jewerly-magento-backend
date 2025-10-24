@@ -363,7 +363,7 @@ export class UltraOptimizedAutomationService {
     // Start counting from the NEXT day after the start date
     current.setDate(current.getDate() + 1);
 
-    while (current < end) { // Changed from <= to < to exclude the end date
+    while (current <= end) { // Include the end date in the count
       const dayOfWeek = current.getDay();
       // Monday=1, Tuesday=2, Wednesday=3, Thursday=4, Friday=5
       // Saturday=6, Sunday=0

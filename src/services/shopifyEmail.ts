@@ -153,12 +153,13 @@ export class ShopifyEmailService {
     try {
       const gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
       
-      // Build raw message
+      // Build raw message with proper HTML formatting
+      const htmlBody = this.formatEmailBody(emailData.body || "");
       const raw = this.buildRawMessage({
         from: this.gmailAddress,
         to: emailData.to,
         subject: emailData.subject,
-        html: (emailData.body || "").replace(/\n/g, "<br>"),
+        html: htmlBody,
         replyTo: emailData.replyTo || this.gmailAddress,
       });
 
@@ -195,6 +196,24 @@ export class ShopifyEmailService {
   }
 
   /**
+   * Format email body with proper HTML structure
+   */
+  private formatEmailBody(body: string): string {
+    if (!body || body.trim() === "") {
+      return "<p>No message content.</p>";
+    }
+
+    // Convert plain text to HTML with proper formatting
+    const htmlBody = body
+      .replace(/\n\n/g, '</p><p>') // Double newlines become paragraph breaks
+      .replace(/\n/g, '<br>')      // Single newlines become line breaks
+      .replace(/^/, '<p>')          // Start with paragraph tag
+      .replace(/$/, '</p>');        // End with paragraph tag
+
+    return htmlBody;
+  }
+
+  /**
    * Helper to build raw message for Gmail API
    */
   private buildRawMessage({ from, to, subject, html, replyTo }: {
@@ -204,16 +223,34 @@ export class ShopifyEmailService {
     html: string;
     replyTo?: string;
   }): string {
+    // Encode subject for proper UTF-8 handling
+    const encodedSubject = this.encodeSubject(subject);
+    
     const message =
       `From: ${from}\r\n` +
       `To: ${to}\r\n` +
-      `Subject: ${subject}\r\n` +
+      `Subject: ${encodedSubject}\r\n` +
       `MIME-Version: 1.0\r\n` +
       `Content-Type: text/html; charset=UTF-8\r\n` +
       (replyTo ? `Reply-To: ${replyTo}\r\n` : '') +
       `\r\n` +
       html;
     return Buffer.from(message).toString("base64url");
+  }
+
+  /**
+   * Encode subject line for proper UTF-8 handling
+   */
+  private encodeSubject(subject: string): string {
+    // Check if subject contains non-ASCII characters (like emojis)
+    const hasNonAscii = /[^\x00-\x7F]/.test(subject);
+    
+    if (hasNonAscii) {
+      // Use RFC 2047 encoding for non-ASCII characters
+      return `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+    }
+    
+    return subject;
   }
 
   // All other providers removed to enforce Gmail-only sending.
