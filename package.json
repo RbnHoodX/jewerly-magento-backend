@@ -2,6 +2,7 @@
   "name": "shopify-database-sync",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "tsc && cp -r src/config dist/ 2>/dev/null || true",
     "build:dev": "tsc",
