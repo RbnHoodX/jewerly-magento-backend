@@ -35,7 +35,7 @@ COPY --from=builder /app/src/config ./src/config
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S appuser -u 1001
+  adduser -S appuser -u 1001
 
 # Change ownership of the app directory
 RUN chown -R appuser:nodejs /app
@@ -44,9 +44,9 @@ USER appuser
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check - use PORT environment variable for Railway compatibility
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+  CMD node -e "const port = process.env.PORT || 3000; require('http').get(\`http://localhost:\${port}/health\`, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start the application
 CMD ["node", "dist/api/server.js"]

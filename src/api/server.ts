@@ -135,8 +135,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Load settings on startup
-SystemSettingsService.loadSettings();
+// Load settings on startup - make it non-blocking
+try {
+  SystemSettingsService.loadSettings();
+  console.log("✅ Settings loaded successfully");
+} catch (error) {
+  console.warn("⚠️ Failed to load settings on startup:", error);
+  // Don't exit, continue without settings
+}
 
 // Start cron jobs if enabled (after cron service is initialized)
 const startCronJobsIfEnabled = () => {
@@ -151,7 +157,7 @@ const startCronJobsIfEnabled = () => {
 
 // Health check endpoint - respond immediately for Railway
 app.get("/health", (req, res) => {
-  console.log("🏥 Health check requested");
+  // Respond immediately without any logging or processing to ensure fast response
   res.status(200).json({ 
     status: "ok", 
     timestamp: new Date().toISOString(),
@@ -848,7 +854,7 @@ if (process.env.RAILWAY_ENVIRONMENT) {
 }
 
 // Start server - Railway requires binding to 0.0.0.0
-const server = app.listen(PORT, "0.0.0.0", async () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log("✅ Server started successfully!");
   console.log(`🌐 Server running on port ${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
@@ -869,26 +875,17 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
   );
   logger.log("info", `CORS enabled for all origins`);
 
-  // Test server is actually listening
-  console.log("🧪 Testing server response...");
-  try {
-    const testResponse = await fetch(`http://localhost:${PORT}/health`);
-    const testData = await testResponse.text();
-    console.log(
-      `✅ Server test successful: ${testResponse.status} - ${testData}`
-    );
-  } catch (error) {
-    console.error(`❌ Server test failed:`, error);
-  }
-
   // Initialize cron service asynchronously after server starts (non-blocking)
-  console.log("🔄 Initializing cron service...");
-  initializeCronService().then(() => {
-    startCronJobsIfEnabled();
-    console.log("✅ Cron service initialization complete");
-  }).catch((error) => {
-    console.error("❌ Cron service initialization failed:", error);
-  });
+  // Use setTimeout to ensure server is fully ready before initializing cron
+  setTimeout(() => {
+    console.log("🔄 Initializing cron service...");
+    initializeCronService().then(() => {
+      startCronJobsIfEnabled();
+      console.log("✅ Cron service initialization complete");
+    }).catch((error) => {
+      console.error("❌ Cron service initialization failed:", error);
+    });
+  }, 1000); // Wait 1 second after server starts
 });
 
 // Handle server errors
