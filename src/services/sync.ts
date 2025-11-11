@@ -5,6 +5,7 @@ import { ShopifyService } from "./shopify";
 import { createClient } from "@supabase/supabase-js";
 import {
   ShopifyOrder,
+  ShopifyLineItem,
   CustomerUpsertData,
   OrderInsertData,
   OrderItemInsertData,
@@ -194,8 +195,8 @@ export class SyncService {
     );
 
     if (orderExists) {
-      this.logger.log("info", `Order ${order.name} already exists, updating order items with new specifications`);
-      return await this.updateExistingOrder(order);
+      this.logger.log("info", `Order ${order.name} already exists, skipping sync to preserve manual adjustments.`);
+      return "skipped";
     }
 
     // Prepare customer data
@@ -259,13 +260,15 @@ export class SyncService {
     };
 
     // Prepare order items with images
+    const activeLineItems = this.getActiveLineItems(order);
+
     this.logger.log(
       "info",
-      `Processing ${order.line_items.length} line items for order ${order.name}`
+      `Processing ${activeLineItems.length} active line items (of ${order.line_items.length} total) for order ${order.name}`
     );
 
     const orderItems: OrderItemInsertData[] = await Promise.all(
-      order.line_items.map(async (lineItem) => {
+      activeLineItems.map(async (lineItem) => {
         // Fetch product image URL and variant details
         const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
         const variantDetails = await this.shopifyService.getVariantDetails(
@@ -449,13 +452,15 @@ export class SyncService {
       );
 
       // Process order items with images
+      const activeLineItems = this.getActiveLineItems(order);
+
       this.logger.log(
         "info",
-        `Processing ${order.line_items.length} line items for order ${order.name}`
+        `Processing ${activeLineItems.length} active line items (of ${order.line_items.length} total) for order ${order.name}`
       );
 
       const orderItems: OrderItemInsertData[] = await Promise.all(
-        order.line_items.map(async (lineItem) => {
+        activeLineItems.map(async (lineItem) => {
           // Fetch product image URL and variant details
           const imageUrl = await this.shopifyService.getProductImageUrl(
             lineItem
@@ -534,6 +539,59 @@ export class SyncService {
   }
 
   /**
+   * Filter Shopify line items to exclude removed/zero-quantity entries
+   */
+  private getActiveLineItems(order: ShopifyOrder): ShopifyLineItem[] {
+    return order.line_items.filter((lineItem) => {
+      const quantity = typeof lineItem.quantity === "number" ? lineItem.quantity : 0;
+      const currentQuantity =
+        typeof (lineItem as any).current_quantity === "number"
+          ? (lineItem as any).current_quantity
+          : undefined;
+      const title = lineItem.title?.toLowerCase?.() ?? "";
+
+      const hasRemovalProperty = (lineItem.properties || []).some((prop) => {
+        const name = prop.name?.toLowerCase?.().trim();
+        const value = prop.value?.toLowerCase?.().trim();
+        if (!name || !value) return false;
+
+        const removalIndicators = [
+          "removed",
+          "_removed",
+          "_shopify_removed",
+          "_shopify_line_item_removed",
+        ];
+
+        return (
+          removalIndicators.includes(name) &&
+          ["true", "1", "yes", "removed"].includes(value)
+        );
+      });
+
+      const isZeroQuantity = quantity <= 0;
+      const isZeroCurrentQuantity =
+        typeof currentQuantity === "number" && currentQuantity <= 0;
+      const hasRemovedInTitle = title.includes("removed");
+
+      if (isZeroQuantity || isZeroCurrentQuantity || hasRemovalProperty || hasRemovedInTitle) {
+        this.logger.log("info", "Skipping removed Shopify line item", {
+          order: order.name,
+          title: lineItem.title,
+          quantity,
+          currentQuantity,
+          variantId: lineItem.variant_id,
+          productId: lineItem.product_id,
+          hasRemovalProperty,
+          hasRemovedInTitle,
+        });
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  /**
    * Convert UTC date to EST datetime string (YYYY-MM-DD HH:MM:SS)
    */
   private convertToESTDateTime(utcDateString: string): string {
@@ -591,85 +649,6 @@ export class SyncService {
     }
 
     return details;
-  }
-
-  /**
-   * Update existing order with new detailed specifications
-   */
-  private async updateExistingOrder(order: ShopifyOrder): Promise<"updated"> {
-    try {
-      this.logger.log("info", `Updating existing order ${order.name} with new specifications`);
-
-      // Process order items with updated logic
-      const orderItems = await Promise.all(
-        order.line_items.map(async (lineItem) => {
-          // Fetch product image URL and variant details
-          const imageUrl = await this.shopifyService.getProductImageUrl(lineItem);
-          const variantDetails = await this.shopifyService.getVariantDetails(lineItem);
-
-          // Extract order-specific properties from line item
-          const properties = lineItem.properties || [];
-
-          // Extract specific properties for database columns
-          const ringSize = this.extractProperty(properties, [
-            "ring size",
-            "size",
-            "ring_size",
-          ]);
-          const metalType =
-            variantDetails.metalType ||
-            this.extractProperty(properties, [
-              "metal",
-              "metal type",
-              "metal_type",
-              "metaltype",
-            ]);
-          const engraving = this.extractProperty(properties, [
-            "engraving",
-            "personalization",
-            "text",
-          ]);
-
-          const orderSpecificDetails = this.buildOrderSpecificDetails(
-            lineItem.title,
-            properties,
-            variantDetails.specifications
-          );
-
-          this.logger.log("debug", `Updated line item: ${lineItem.title}`, {
-            sku: lineItem.sku,
-            productId: lineItem.product_id,
-            variantId: lineItem.variant_id,
-            properties: properties.length,
-            ringSize: ringSize || "Not found",
-            metalType: metalType || "Not found",
-            engraving: engraving || "Not found",
-            imageUrl: imageUrl || "No image found",
-            newDetails: orderSpecificDetails,
-          });
-
-          return {
-            sku: lineItem.sku,
-            details: orderSpecificDetails,
-            price: parseFloat(lineItem.price),
-            qty: lineItem.quantity,
-            image: imageUrl || undefined,
-            size: ringSize || undefined,
-            metal_type: metalType || undefined,
-          };
-        })
-      );
-
-      // Update order items in database
-      await this.databaseService.updateOrderItems(order.name, orderItems);
-
-      this.logger.log("info", `Successfully updated order ${order.name} with new specifications`);
-      return "updated";
-
-    } catch (error) {
-      this.logger.log("error", `Failed to update order ${order.name}`, { error });
-      throw error;
-    }
   }
 
   /**
